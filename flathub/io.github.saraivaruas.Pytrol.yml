@@ -76,5 +76,5 @@ modules:
     sources:
       - type: git
         url: https://github.com/saraivaruas/pytrol.git
-        tag: v0.3.0
-        commit: d179eacf553335549dea1c0f4b3d68ca4325d444
+        tag: v0.3.1
+        commit: e97ba72d7cd6ea1e01c3184b6b606259ce57f165
