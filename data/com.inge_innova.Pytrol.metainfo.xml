@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.inge_innova.Pytrol</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Pytrol</name>
+  <summary>Advanced Python Terminal: Power, Speed, Control</summary>
+  <developer id="com.inge_innova">
+    <name>Inge Innova</name>
+  </developer>
+  <description>
+    <p>Pytrol es un terminal avanzado para Linux escrito en Python: potencia, velocidad y control. Divide la pantalla en 2, 4, 6 u 8 paneles y abre un proyecto distinto en cada uno, con pestañas, menú completo y atajos configurables.</p>
+    <p>Características:</p>
+    <ul>
+      <li>Pestañas reordenables que heredan el directorio actual</li>
+      <li>Paneles divisibles en 2, 4, 6 u 8, vertical u horizontalmente, con navegación Alt+flechas</li>
+      <li>Un proyecto distinto en cada panel, con cabecera que muestra la carpeta y lista de proyectos recientes</li>
+      <li>Barra de menú completa y atajos de teclado configurables desde Preferencias</li>
+      <li>Fuente, esquema de colores, cursor e historial configurables</li>
+      <li>Zoom con Ctrl + / Ctrl -, pantalla completa con F11</li>
+      <li>Menú contextual con copiar, pegar y limpiar</li>
+      <li>Colores de 24 bits y enlaces clicables</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">com.inge_innova.Pytrol.desktop</launchable>
+  <url type="homepage">https://github.com/saraivaruas/pytrol</url>
+  <url type="bugtracker">https://github.com/saraivaruas/pytrol/issues</url>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/saraivaruas/pytrol/main/data/screenshots/main.png</image>
+      <caption>Ventana principal con dos pestañas</caption>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.2.0" date="2026-11-11">
+      <description><p>Barra de menú, paneles divisibles (2/4/6/8), proyectos por panel, preferencias y atajos configurables.</p></description>
+    </release>
+    <release version="0.1.0" date="2026-11-11">
+      <description><p>Primera versión.</p></description>
+    </release>
+  </releases>
+</component>

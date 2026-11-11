@@ -1,0 +1,24 @@
+app-id: com.inge_innova.Pytrol
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+command: pytrol
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  # Necesario para abrir el shell del sistema anfitrión (flatpak-spawn --host)
+  - --talk-name=org.freedesktop.Flatpak
+  - --filesystem=home
+modules:
+  - name: pytrol
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 pytrol.py /app/bin/pytrol
+      - install -Dm644 data/com.inge_innova.Pytrol.desktop /app/share/applications/com.inge_innova.Pytrol.desktop
+      - install -Dm644 data/com.inge_innova.Pytrol.metainfo.xml /app/share/metainfo/com.inge_innova.Pytrol.metainfo.xml
+      - install -Dm644 data/icons/com.inge_innova.Pytrol.svg /app/share/icons/hicolor/scalable/apps/com.inge_innova.Pytrol.svg
+    sources:
+      - type: dir
+        path: .

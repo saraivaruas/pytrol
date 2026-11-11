@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Pytrol
+Comment=Advanced Python Terminal: Power, Speed, Control
+Exec=pytrol
+Icon=com.inge_innova.Pytrol
+Terminal=false
+Type=Application
+Categories=System;TerminalEmulator;
+Keywords=terminal;shell;consola;
+StartupNotify=true
