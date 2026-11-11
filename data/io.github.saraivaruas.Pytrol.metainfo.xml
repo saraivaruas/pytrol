@@ -17,6 +17,8 @@
       <li>Un proyecto distinto en cada panel, con cabecera que muestra la carpeta y lista de proyectos recientes</li>
       <li>Barra de menú completa y atajos de teclado configurables desde Preferencias</li>
       <li>Fuente, esquema de colores, cursor e historial configurables</li>
+      <li>Sesión persistente: restaura pestañas, paneles y carpetas tras un cierre inesperado</li>
+      <li>Cierre seguro con doble confirmación configurable</li>
       <li>Zoom con Ctrl + / Ctrl -, pantalla completa con F11</li>
       <li>Menú contextual con copiar, pegar y limpiar</li>
       <li>Colores de 24 bits y enlaces clicables</li>

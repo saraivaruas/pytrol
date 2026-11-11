@@ -4,6 +4,7 @@ import glob
 import json
 import os
 import shlex
+import signal
 import sys
 
 import gi
@@ -16,8 +17,10 @@ from gi.repository import Gdk, GLib, Gtk, Pango, Vte  # noqa: E402
 APP_TITLE = "Pytrol"
 APP_ID = "io.github.saraivaruas.Pytrol"
 IN_FLATPAK = os.path.exists("/.flatpak-info")
-CONFIG_DIR = os.path.join(GLib.get_user_config_dir(), "pytrol")
+CONFIG_DIR = os.environ.get("PYTROL_CONFIG_DIR") or os.path.join(GLib.get_user_config_dir(), "pytrol")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
+SESSION_FILE = os.path.join(CONFIG_DIR, "session.json")
+SESSION_SAVE_SECONDS = 5
 
 # ---------------------------------------------------------------- esquemas de color
 SCHEMES = {
@@ -47,8 +50,8 @@ ACTIONS = [
     ("move_tab_left", "Mover pestaña a la izquierda", "<Primary><Shift>Left"),
     ("move_tab_right", "Mover pestaña a la derecha", "<Primary><Shift>Right"),
     ("quit", "Salir", "<Primary><Shift>q"),
-    ("split_h", "Dividir horizontalmente (arriba/abajo)", "<Primary><Shift>Down"),
-    ("split_v", "Dividir verticalmente (izquierda/derecha)", "<Primary><Shift>Right"),
+    ("split_h", "Dividir horizontalmente (arriba/abajo)", "<Primary><Shift>d"),
+    ("split_v", "Dividir verticalmente (izquierda/derecha)", "<Primary><Shift>r"),
     ("close_pane", "Cerrar panel", "<Primary><Shift>x"),
     ("focus_left", "Panel de la izquierda", "<Alt>Left"),
     ("focus_right", "Panel de la derecha", "<Alt>Right"),
@@ -93,6 +96,8 @@ DEFAULT_CONFIG = {
     "show_menubar": True,
     "show_pane_headers": True,
     "window_size": [1000, 620],
+    "restore_session": True,
+    "confirm_close": 2,
     "shortcuts": dict(DEFAULT_SHORTCUTS),
     "recent_projects": [],
 }
@@ -106,6 +111,12 @@ def load_config():
         for k, v in data.items():
             if k == "shortcuts" and isinstance(v, dict):
                 cfg["shortcuts"].update(v)
+                # Migración: versiones anteriores asignaban a las divisiones las mismas
+                # teclas que a "mover pestaña", y nunca llegaban a ejecutarse.
+                for action, old, new in (("split_v", "<Primary><Shift>Right", "<Primary><Shift>r"),
+                                         ("split_h", "<Primary><Shift>Down", "<Primary><Shift>d")):
+                    if cfg["shortcuts"].get(action) == old:
+                        cfg["shortcuts"][action] = new
             else:
                 cfg[k] = v
     except (OSError, ValueError):
@@ -120,6 +131,28 @@ def save_config(cfg):
             json.dump(cfg, fh, indent=2, ensure_ascii=False)
     except OSError as exc:
         print(f"No se pudo guardar la configuración: {exc}", file=sys.stderr)
+
+
+def load_session():
+    try:
+        with open(SESSION_FILE, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, dict) and data.get("tabs"):
+            return data
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def write_session(data):
+    try:
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        tmp = SESSION_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=1, ensure_ascii=False)
+        os.replace(tmp, SESSION_FILE)
+    except OSError as exc:
+        print(f"No se pudo guardar la sesión: {exc}", file=sys.stderr)
 
 
 def rgba(hexstr):
@@ -191,11 +224,14 @@ class Pane(Gtk.Box):
         self.term.connect("focus-in-event", lambda *_: app.on_pane_focus(self))
         self.term.connect("button-press-event", lambda t, e: app.on_button(self, e))
         self.term.connect("window-title-changed", lambda *_: app.on_title_changed(self))
-        self.term.connect("child-exited", lambda *_: app.close_pane(self))
+        self.term.connect("child-exited", lambda *_: app.close_pane(self, from_exit=True))
         self.spawn(cwd)
 
     def spawn(self, cwd):
         cwd = cwd or os.path.expanduser("~")
+        if not os.path.isdir(cwd):
+            cwd = os.path.expanduser("~")
+        self.last_cwd = cwd
         shell = self.app.cfg.get("shell") or os.environ.get("SHELL", "/bin/bash")
         env = dict(os.environ)
         env["TERM"] = "xterm-256color"
@@ -242,7 +278,14 @@ class Pane(Gtk.Box):
     def change_dir(self, path):
         """Cambia el directorio del shell en marcha (sin matar el proceso)."""
         self.term.feed_child(f" cd {shlex.quote(path)} && clear\n".encode())
+        self.last_cwd = path
         self.header.set_text(path)
+
+    def cwd_or_last(self):
+        cwd = self.cwd()
+        if cwd:
+            self.last_cwd = cwd
+        return self.last_cwd
 
 
 class Tab(Gtk.Box):
@@ -295,12 +338,25 @@ class Pytrol(Gtk.Window):
         self.vbox.pack_start(self.notebook, True, True, 0)
 
         self.connect("key-press-event", self.on_key)
+        self.connect("delete-event", self.on_delete_event)
         self.connect("destroy", self.on_destroy)
         self.connect("size-allocate", self._remember_size)
 
-        self.new_tab()
+        self._quitting = False
+        self._session_dirty = False
+        restored = self.cfg.get("restore_session", True) and self.restore_session()
+        if not restored:
+            self.new_tab()
         self.show_all()
         self.menubar.set_visible(self.cfg["show_menubar"])
+
+        # Guardado periódico de la sesión (protege ante cierres bruscos)
+        GLib.timeout_add_seconds(SESSION_SAVE_SECONDS, self._periodic_save)
+        for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+            try:
+                GLib.unix_signal_add(GLib.PRIORITY_HIGH, sig, self._on_unix_signal)
+            except (AttributeError, ValueError):
+                pass
 
     def _install_css(self):
         css = Gtk.CssProvider()
@@ -315,6 +371,128 @@ class Pytrol(Gtk.Window):
     def _remember_size(self, _w, alloc):
         if not (self.get_window() and self.get_window().get_state() & Gdk.WindowState.MAXIMIZED):
             self.cfg["window_size"] = [alloc.width, alloc.height]
+
+    # ---------------------------------------------------------- sesión
+    def _serialize_widget(self, w):
+        if isinstance(w, Pane):
+            return {"type": "pane", "cwd": w.cwd_or_last()}
+        if isinstance(w, Gtk.Paned):
+            alloc = w.get_allocation()
+            size = alloc.width if w.get_orientation() == Gtk.Orientation.HORIZONTAL else alloc.height
+            frac = (w.get_position() / size) if size > 1 else getattr(w, "fraction", 0.5)
+            return {"type": "split",
+                    "orientation": "h" if w.get_orientation() == Gtk.Orientation.HORIZONTAL else "v",
+                    "fraction": round(min(0.95, max(0.05, frac)), 3),
+                    "a": self._serialize_widget(w.get_child1()),
+                    "b": self._serialize_widget(w.get_child2())}
+        return None
+
+    def session_state(self):
+        tabs = []
+        for i in range(self.notebook.get_n_pages()):
+            tab = self.notebook.get_nth_page(i)
+            root = tab.root()
+            if root is None:
+                continue
+            tabs.append({"layout": self._serialize_widget(root),
+                         "focused": tab.panes().index(tab.focused) if tab.focused in tab.panes() else 0})
+        return {"version": 1, "tabs": tabs, "current": max(0, self.notebook.get_current_page()),
+                "window_size": self.cfg.get("window_size")}
+
+    def save_session(self, *_):
+        if self.notebook.get_n_pages() == 0:
+            return
+        write_session(self.session_state())
+        self._session_dirty = False
+
+    def mark_session_dirty(self):
+        self._session_dirty = True
+
+    def _periodic_save(self):
+        # Las carpetas cambian sin aviso (cd en el shell), así que guardamos siempre.
+        self.save_session()
+        return True
+
+    def _build_widget(self, node):
+        if not node:
+            return Pane(self)
+        if node.get("type") == "pane":
+            return Pane(self, node.get("cwd"))
+        orient = Gtk.Orientation.HORIZONTAL if node.get("orientation") == "h" else Gtk.Orientation.VERTICAL
+        paned = SplitPaned(orient, float(node.get("fraction", 0.5)))
+        paned.pack1(self._build_widget(node.get("a")), True, False)
+        paned.pack2(self._build_widget(node.get("b")), True, False)
+        return paned
+
+    def restore_session(self):
+        data = load_session()
+        if not data:
+            return False
+        try:
+            for tdata in data["tabs"]:
+                tab = self.new_tab(inherit_cwd=False)
+                first = tab.panes()[0]
+                tab.remove(first)
+                first.destroy()
+                root = self._build_widget(tdata.get("layout"))
+                tab.pack_start(root, True, True, 0)
+                tab.show_all()
+                panes = tab.panes()
+                idx = int(tdata.get("focused", 0))
+                tab.focused = panes[idx] if 0 <= idx < len(panes) else panes[0]
+                self.update_headers(tab)
+            cur = int(data.get("current", 0))
+            if 0 <= cur < self.notebook.get_n_pages():
+                self.notebook.set_current_page(cur)
+            return self.notebook.get_n_pages() > 0
+        except (KeyError, TypeError, ValueError, IndexError) as exc:
+            print(f"Sesión anterior no válida, se ignora: {exc}", file=sys.stderr)
+            return False
+
+    # ---------------------------------------------------------- cierre seguro
+    def _count_panes(self):
+        return sum(len(self.notebook.get_nth_page(i).panes()) for i in range(self.notebook.get_n_pages()))
+
+    def _ask(self, title, text, ok_label):
+        dlg = Gtk.MessageDialog(transient_for=self, modal=True, message_type=Gtk.MessageType.QUESTION,
+                                buttons=Gtk.ButtonsType.NONE, text=title)
+        dlg.format_secondary_text(text)
+        dlg.add_button("Cancelar", Gtk.ResponseType.CANCEL)
+        dlg.add_button(ok_label, Gtk.ResponseType.OK)
+        dlg.set_default_response(Gtk.ResponseType.CANCEL)
+        resp = dlg.run()
+        dlg.destroy()
+        return resp == Gtk.ResponseType.OK
+
+    def confirm_quit(self):
+        """Pide confirmación tantas veces como diga la configuración (por defecto 2)."""
+        times = int(self.cfg.get("confirm_close", 2))
+        n_tabs, n_panes = self.notebook.get_n_pages(), self._count_panes()
+        prompts = [
+            ("¿Cerrar Pytrol?", f"Hay {n_tabs} pestaña(s) y {n_panes} panel(es) abiertos. "
+                                "La sesión se guardará y se restaurará al volver a abrir.", "Cerrar"),
+            ("¿Seguro que quieres cerrar?", "Segunda confirmación: los procesos que estén "
+                                            "ejecutándose en los paneles se terminarán.", "Sí, cerrar"),
+        ]
+        for i in range(min(times, len(prompts))):
+            if not self._ask(*prompts[i]):
+                return False
+        return True
+
+    def on_delete_event(self, *_):
+        if self._quitting:
+            return False
+        if not self.confirm_quit():
+            return True  # cancelar el cierre
+        self._quitting = True
+        self.save_session()
+        return False
+
+    def _on_unix_signal(self, *_):
+        self.save_session()
+        save_config(self.cfg)
+        Gtk.main_quit()
+        return False
 
     # ---------------------------------------------------------- menú
     def _item(self, action_id, label=None):
@@ -444,16 +622,26 @@ class Pytrol(Gtk.Window):
         pane.term.grab_focus()
         self.update_tabs_visibility()
         self.update_headers(tab)
+        self.save_session()
         return tab
 
-    def close_tab(self, tab):
+    def close_tab(self, tab, force=False):
+        if not force:
+            if self.notebook.get_n_pages() == 1:
+                # Última pestaña: cerrar la app, con la confirmación habitual.
+                self.quit()
+                return
+            if len(tab.panes()) > 1 and not self._ask(
+                    "¿Cerrar esta pestaña?", f"Tiene {len(tab.panes())} paneles abiertos.", "Cerrar pestaña"):
+                return
         idx = self.notebook.page_num(tab)
         if idx >= 0:
             self.notebook.remove_page(idx)
             tab.destroy()
         if self.notebook.get_n_pages() == 0:
-            self.quit()
+            self.quit(force=True)
         else:
+            self.save_session()
             self.update_tabs_visibility()
             pane = self.current_pane()
             if pane:
@@ -486,9 +674,10 @@ class Pytrol(Gtk.Window):
         paned.show_all()
         self.update_headers(tab)
         new_pane.term.grab_focus()
+        self.save_session()
         return new_pane
 
-    def close_pane(self, pane):
+    def close_pane(self, pane, from_exit=False):
         tab = pane.get_ancestor(Tab)
         if tab is None:
             return
@@ -505,8 +694,10 @@ class Pytrol(Gtk.Window):
             self.update_headers(tab)
             if tab.focused:
                 tab.focused.term.grab_focus()
+            self.save_session()
         else:
-            self.close_tab(tab)
+            # El shell terminó por sí solo (exit): no pedimos confirmación.
+            self.close_tab(tab, force=from_exit)
 
     def apply_layout(self, idx):
         """Aplica un diseño predefinido: en la pestaña actual si tiene un solo panel, si no en una nueva."""
@@ -527,6 +718,7 @@ class Pytrol(Gtk.Window):
         tab.focused = first
         self.update_headers(tab)
         first.term.grab_focus()
+        self.save_session()
 
     def _nest(self, widgets, orientation):
         if len(widgets) == 1:
@@ -677,6 +869,8 @@ class Pytrol(Gtk.Window):
         return False
 
     def on_destroy(self, *_):
+        if self.notebook.get_n_pages() > 0:
+            self.save_session()
         save_config(self.cfg)
         Gtk.main_quit()
 
@@ -728,7 +922,13 @@ class Pytrol(Gtk.Window):
         else:
             self.fullscreen()
 
-    def quit(self):
+    def quit(self, force=False):
+        if self._quitting:
+            return
+        if not force and not self.confirm_quit():
+            return
+        self._quitting = True
+        self.save_session()
         self.destroy()
 
     def show_context_menu(self, pane, event):
@@ -815,6 +1015,14 @@ class PreferencesDialog(Gtk.Dialog):
         self.headers = Gtk.CheckButton(label="Mostrar cabecera con el proyecto en cada panel",
                                        active=cfg["show_pane_headers"])
         add("", self.headers)
+        self.restore = Gtk.CheckButton(label="Restaurar pestañas y paneles al iniciar",
+                                       active=cfg.get("restore_session", True))
+        add("", self.restore)
+        self.confirm = Gtk.ComboBoxText()
+        for label in ("No preguntar", "Preguntar una vez", "Preguntar dos veces"):
+            self.confirm.append_text(label)
+        self.confirm.set_active(max(0, min(2, int(cfg.get("confirm_close", 2)))))
+        add("Confirmar al cerrar", self.confirm)
         nb.append_page(grid, Gtk.Label(label="General"))
 
         # --- Atajos
@@ -872,6 +1080,8 @@ class PreferencesDialog(Gtk.Dialog):
         cfg["shell"] = self.shell.get_text().strip()
         cfg["show_menubar"] = self.menubar.get_active()
         cfg["show_pane_headers"] = self.headers.get_active()
+        cfg["restore_session"] = self.restore.get_active()
+        cfg["confirm_close"] = self.confirm.get_active()
         cfg["shortcuts"] = {row[0]: row[2] for row in self.store}
 
 

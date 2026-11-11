@@ -16,6 +16,12 @@ que GNOME Terminal). Licencia MIT.
 - **Preferencias**: fuente, esquema de colores (qterminal oscuro, Dracula,
   Solarized, claro), cursor, historial, shell y **todos los atajos editables**.
   Se guardan en `~/.config/pytrol/config.json`.
+- **Sesión persistente**: cada 5 segundos guarda pestañas, divisiones y la
+  carpeta de cada panel; si se cierra de golpe (corte de luz, `kill`, cuelgue)
+  al volver a abrir reconstruye todo tal como estaba.
+- **Cierre seguro**: al cerrar pregunta dos veces (configurable: ninguna, una o
+  dos) para que no se pierda el trabajo por un atajo pulsado sin querer. Si el
+  shell termina por sí solo con `exit`, no pregunta.
 
 ## Instalar y probar en tu máquina
 
@@ -56,8 +62,8 @@ Todos se cambian en Preferencias → Atajos de teclado.
 |--------------------------------------|---------------------------|
 | Nueva pestaña / cerrar pestaña       | Ctrl+Shift+T / Ctrl+Shift+W |
 | Cambiar de pestaña                   | Ctrl+PgUp / Ctrl+PgDn     |
-| Dividir vertical (izq/der)           | Ctrl+Shift+→              |
-| Dividir horizontal (arriba/abajo)    | Ctrl+Shift+↓              |
+| Dividir vertical (izq/der)           | Ctrl+Shift+R              |
+| Dividir horizontal (arriba/abajo)    | Ctrl+Shift+D              |
 | Cerrar panel                         | Ctrl+Shift+X              |
 | Moverse entre paneles                | Alt+flechas               |
 | Abrir proyecto en este panel         | Ctrl+Shift+O              |
