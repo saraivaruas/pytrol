@@ -1,0 +1,29 @@
+# Manifest para la solicitud a Flathub (PR a github.com/flathub/flathub, rama new-pr).
+# A diferencia del manifest de la raíz (fuente local para desarrollo), este compila
+# desde la etiqueta publicada en GitHub.
+app-id: io.github.saraivaruas.Pytrol
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+command: pytrol
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  # Pytrol es un terminal: abre el shell del sistema anfitrión con flatpak-spawn --host
+  - --talk-name=org.freedesktop.Flatpak
+  - --filesystem=home
+modules:
+  - name: pytrol
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 pytrol.py /app/bin/pytrol
+      - install -Dm644 data/io.github.saraivaruas.Pytrol.desktop /app/share/applications/io.github.saraivaruas.Pytrol.desktop
+      - install -Dm644 data/io.github.saraivaruas.Pytrol.metainfo.xml /app/share/metainfo/io.github.saraivaruas.Pytrol.metainfo.xml
+      - install -Dm644 data/icons/io.github.saraivaruas.Pytrol.svg /app/share/icons/hicolor/scalable/apps/io.github.saraivaruas.Pytrol.svg
+    sources:
+      - type: git
+        url: https://github.com/saraivaruas/pytrol.git
+        tag: v0.2.0
+        commit: 3c1945b44855bf91786861c2f881f253484ad190
