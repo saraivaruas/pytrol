@@ -2,7 +2,7 @@
 Name=Pytrol
 Comment=Advanced Python Terminal: Power, Speed, Control
 Exec=pytrol
-Icon=com.inge_innova.Pytrol
+Icon=io.github.saraivaruas.Pytrol
 Terminal=false
 Type=Application
 Categories=System;TerminalEmulator;

@@ -1,4 +1,4 @@
-app-id: com.inge_innova.Pytrol
+app-id: io.github.saraivaruas.Pytrol
 runtime: org.gnome.Platform
 runtime-version: '47'
 sdk: org.gnome.Sdk
@@ -16,9 +16,9 @@ modules:
     buildsystem: simple
     build-commands:
       - install -Dm755 pytrol.py /app/bin/pytrol
-      - install -Dm644 data/com.inge_innova.Pytrol.desktop /app/share/applications/com.inge_innova.Pytrol.desktop
-      - install -Dm644 data/com.inge_innova.Pytrol.metainfo.xml /app/share/metainfo/com.inge_innova.Pytrol.metainfo.xml
-      - install -Dm644 data/icons/com.inge_innova.Pytrol.svg /app/share/icons/hicolor/scalable/apps/com.inge_innova.Pytrol.svg
+      - install -Dm644 data/io.github.saraivaruas.Pytrol.desktop /app/share/applications/io.github.saraivaruas.Pytrol.desktop
+      - install -Dm644 data/io.github.saraivaruas.Pytrol.metainfo.xml /app/share/metainfo/io.github.saraivaruas.Pytrol.metainfo.xml
+      - install -Dm644 data/icons/io.github.saraivaruas.Pytrol.svg /app/share/icons/hicolor/scalable/apps/io.github.saraivaruas.Pytrol.svg
     sources:
       - type: dir
         path: .

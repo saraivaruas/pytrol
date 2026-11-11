@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>com.inge_innova.Pytrol</id>
+  <id>io.github.saraivaruas.Pytrol</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <name>Pytrol</name>
   <summary>Advanced Python Terminal: Power, Speed, Control</summary>
-  <developer id="com.inge_innova">
+  <developer id="io.github.saraivaruas">
     <name>Inge Innova</name>
   </developer>
   <description>
@@ -22,7 +22,7 @@
       <li>Colores de 24 bits y enlaces clicables</li>
     </ul>
   </description>
-  <launchable type="desktop-id">com.inge_innova.Pytrol.desktop</launchable>
+  <launchable type="desktop-id">io.github.saraivaruas.Pytrol.desktop</launchable>
   <url type="homepage">https://github.com/saraivaruas/pytrol</url>
   <url type="bugtracker">https://github.com/saraivaruas/pytrol/issues</url>
   <screenshots>

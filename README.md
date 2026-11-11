@@ -84,11 +84,11 @@ flatpak install --user flathub org.gnome.Platform//47 org.gnome.Sdk//47
 ```
 
 ```bash
-flatpak-builder --user --install --force-clean build-dir com.inge_innova.Pytrol.yml
+flatpak-builder --user --install --force-clean build-dir io.github.saraivaruas.Pytrol.yml
 ```
 
 ```bash
-flatpak run com.inge_innova.Pytrol
+flatpak run io.github.saraivaruas.Pytrol
 ```
 
 Dentro del sandbox el programa abre el shell del sistema anfitrión mediante
@@ -103,18 +103,18 @@ flathub.org. Publicar es gratuito; el proceso es:
    manifest apunte a una fuente con URL y hash, no a un directorio local.
 2. **Elegir el ID definitivo.** El ID debe ser un dominio que controles al
    revés. Opciones:
-   - `com.inge_innova.Pytrol` (actual): Flathub pedirá verificar el dominio
+   - `io.github.saraivaruas.Pytrol` (actual): Flathub pedirá verificar el dominio
      inge-innova.com con un fichero en `/.well-known/`.
    - `io.github.saraivaruas.Pytrol`: se verifica solo con tu cuenta de GitHub,
      sin tocar DNS. Es el camino más fácil.
    Si cambias el ID, renombra los ficheros en `data/`, el manifest y la
    constante `APP_ID` en `pytrol.py`.
 3. **Completar el metainfo.** Cambia las URL con `saraivaruas` en
-   `data/com.inge_innova.Pytrol.metainfo.xml` por las reales y añade una
+   `data/io.github.saraivaruas.Pytrol.metainfo.xml` por las reales y añade una
    captura de pantalla real en `data/screenshots/main.png`. Valida con:
 
    ```bash
-   appstreamcli validate data/com.inge_innova.Pytrol.metainfo.xml
+   appstreamcli validate data/io.github.saraivaruas.Pytrol.metainfo.xml
    ```
 
 4. **Cambiar la fuente del manifest** de `type: dir` a una etiqueta de git:

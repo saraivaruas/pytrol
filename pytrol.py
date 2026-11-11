@@ -14,7 +14,7 @@ gi.require_version("Vte", "2.91")
 from gi.repository import Gdk, GLib, Gtk, Pango, Vte  # noqa: E402
 
 APP_TITLE = "Pytrol"
-APP_ID = "com.inge_innova.Pytrol"
+APP_ID = "io.github.saraivaruas.Pytrol"
 IN_FLATPAK = os.path.exists("/.flatpak-info")
 CONFIG_DIR = os.path.join(GLib.get_user_config_dir(), "pytrol")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")

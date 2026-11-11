@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Instala Pytrol para el usuario actual (sin sudo) o para todo el sistema (--system).
 set -euo pipefail
-APP_ID=com.inge_innova.Pytrol
+APP_ID=io.github.saraivaruas.Pytrol
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ "${1:-}" == "--system" ]]; then

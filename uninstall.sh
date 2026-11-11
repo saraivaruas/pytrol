@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-APP_ID=com.inge_innova.Pytrol
+APP_ID=io.github.saraivaruas.Pytrol
 if [[ "${1:-}" == "--system" ]]; then PREFIX=/usr/local; SUDO=sudo; else PREFIX="$HOME/.local"; SUDO=""; fi
 $SUDO rm -f "$PREFIX/bin/pytrol" \
   "$PREFIX/share/applications/$APP_ID.desktop" \
