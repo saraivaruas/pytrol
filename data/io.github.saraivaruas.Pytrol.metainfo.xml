@@ -35,6 +35,9 @@
   </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.1" date="2026-11-11">
+      <description><p>Flatpak: el shell del anfitrión obtiene su terminal de control (control de trabajos, sin el aviso "can't access tty") y se usa el shell real del usuario en lugar de /bin/sh.</p></description>
+    </release>
     <release version="0.3.0" date="2026-11-11">
       <description><p>Sesión persistente (restaura pestañas, paneles y carpetas tras un cierre inesperado), cierre seguro con doble confirmación, atajos de división Ctrl+Shift+R / Ctrl+Shift+D y empaquetado Flatpak sobre GNOME 51 con VTE 0.84.</p></description>
     </release>

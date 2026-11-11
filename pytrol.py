@@ -5,6 +5,7 @@ import json
 import os
 import shlex
 import signal
+import subprocess
 import sys
 
 import gi
@@ -133,6 +134,27 @@ def save_config(cfg):
         print(f"No se pudo guardar la configuración: {exc}", file=sys.stderr)
 
 
+_HOST_SHELL = None
+
+
+def host_shell():
+    """Shell de inicio del usuario en el sistema anfitrión (dentro de Flatpak, SHELL vale /bin/sh)."""
+    global _HOST_SHELL
+    if _HOST_SHELL is None:
+        shell = ""
+        if IN_FLATPAK:
+            try:
+                out = subprocess.run(
+                    ["flatpak-spawn", "--host", "sh", "-c", 'getent passwd "$(id -un)" | cut -d: -f7'],
+                    capture_output=True, text=True, timeout=5).stdout.strip()
+                if out.startswith("/"):
+                    shell = out
+            except (OSError, subprocess.SubprocessError):
+                pass
+        _HOST_SHELL = shell or os.environ.get("SHELL") or "/bin/bash"
+    return _HOST_SHELL
+
+
 def load_session():
     try:
         with open(SESSION_FILE, encoding="utf-8") as fh:
@@ -232,17 +254,24 @@ class Pane(Gtk.Box):
         if not os.path.isdir(cwd):
             cwd = os.path.expanduser("~")
         self.last_cwd = cwd
-        shell = self.app.cfg.get("shell") or os.environ.get("SHELL", "/bin/bash")
+        shell = self.app.cfg.get("shell") or host_shell()
         env = dict(os.environ)
         env["TERM"] = "xterm-256color"
         env["COLORTERM"] = "truecolor"
         envv = [f"{k}={v}" for k, v in env.items()]
+        flags = Vte.PtyFlags.DEFAULT
         if IN_FLATPAK:
-            argv = ["flatpak-spawn", "--host", "--env=TERM=xterm-256color",
-                    "--env=COLORTERM=truecolor", f"--directory={cwd}", shell]
+            # El shell corre en el anfitrión. NO_CTTY: el proceso del sandbox no toma la
+            # pty como terminal de control, para que la tome el shell del anfitrión y
+            # tenga control de trabajos (sin el aviso "can't access tty").
+            # --watch-bus: el shell termina si se cierra el panel.
+            flags = Vte.PtyFlags.NO_CTTY
+            argv = ["flatpak-spawn", "--host", "--watch-bus", "--env=TERM=xterm-256color",
+                    "--env=COLORTERM=truecolor", f"--env=SHELL={shell}",
+                    f"--directory={cwd}"] + shlex.split(shell)
         else:
             argv = shlex.split(shell)
-        self.term.spawn_async(Vte.PtyFlags.DEFAULT, cwd, argv, envv,
+        self.term.spawn_async(flags, cwd, argv, envv,
                               GLib.SpawnFlags.SEARCH_PATH, None, None, -1, None, None, None)
 
     def apply_config(self, cfg):
@@ -946,7 +975,7 @@ class Pytrol(Gtk.Window):
         menu.popup_at_pointer(event)
 
     def show_about(self, *_):
-        dlg = Gtk.AboutDialog(transient_for=self, program_name=APP_TITLE, version="0.3.0",
+        dlg = Gtk.AboutDialog(transient_for=self, program_name=APP_TITLE, version="0.3.1",
                               comments="Advanced Python Terminal: Power, Speed, Control.\nPaneles, proyectos y pestañas en un solo lugar.",
                               logo_icon_name=APP_ID, license_type=Gtk.License.MIT_X11)
         dlg.run()
@@ -1008,7 +1037,7 @@ class PreferencesDialog(Gtk.Dialog):
         self.scrollback = Gtk.SpinButton.new_with_range(100, 1_000_000, 100)
         self.scrollback.set_value(int(cfg["scrollback"]))
         add("Líneas de historial", self.scrollback)
-        self.shell = Gtk.Entry(text=cfg["shell"], placeholder_text=os.environ.get("SHELL", "/bin/bash"))
+        self.shell = Gtk.Entry(text=cfg["shell"], placeholder_text=host_shell())
         add("Comando del shell", self.shell)
         self.menubar = Gtk.CheckButton(label="Mostrar barra de menú", active=cfg["show_menubar"])
         add("", self.menubar)
