@@ -77,8 +77,12 @@ Todos se cambian en Preferencias → Atajos de teclado.
 
 ## Construir el Flatpak
 
+Se compila con `org.flatpak.Builder`, la misma herramienta (y el mismo linter)
+que usa Flathub. El runtime de GNOME no incluye VTE, así que el manifest lo
+compila como módulo (variante GTK 3); la primera compilación tarda unos minutos.
+
 ```bash
-sudo apt install flatpak flatpak-builder
+sudo apt install flatpak
 ```
 
 ```bash
@@ -86,11 +90,11 @@ flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/fl
 ```
 
 ```bash
-flatpak install --user flathub org.gnome.Platform//47 org.gnome.Sdk//47
+flatpak install --user flathub org.flatpak.Builder org.gnome.Platform//51 org.gnome.Sdk//51
 ```
 
 ```bash
-flatpak-builder --user --install --force-clean build-dir io.github.saraivaruas.Pytrol.yml
+flatpak run org.flatpak.Builder --user --install --force-clean --compose-url-policy=full --mirror-screenshots-url=https://dl.flathub.org/media/ --state-dir=$HOME/.cache/pytrol-build/state $HOME/.cache/pytrol-build/build-dir io.github.saraivaruas.Pytrol.yml
 ```
 
 ```bash
@@ -98,7 +102,18 @@ flatpak run io.github.saraivaruas.Pytrol
 ```
 
 Dentro del sandbox el programa abre el shell del sistema anfitrión mediante
-`flatpak-spawn --host`, por eso el manifest pide `--talk-name=org.freedesktop.Flatpak`.
+`flatpak-spawn --host`, por eso el manifest pide `--talk-name=org.freedesktop.Flatpak`
+(el mismo permiso que usan Ptyxis, Black Box o Tilix).
+
+Linter de Flathub (debe pasar sin errores antes de enviar):
+
+```bash
+flatpak run --command=flatpak-builder-lint org.flatpak.Builder manifest flathub/io.github.saraivaruas.Pytrol.yml
+```
+
+```bash
+flatpak run --command=flatpak-builder-lint org.flatpak.Builder appstream data/io.github.saraivaruas.Pytrol.metainfo.xml
+```
 
 ## Publicar en Flathub (gratis)
 
