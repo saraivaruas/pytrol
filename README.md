@@ -30,6 +30,14 @@ que GNOME Terminal). Licencia MIT.
   luz, `kill`, cuelgue), reconstruye todo y muestra el contenido anterior bajo
   un separador. Si limpiaste con `clear`, se restaura vacío. Se puede desactivar
   en Preferencias.
+- **Editor integrado en cada panel**: doble clic en un archivo del árbol (o
+  Archivo → Abrir archivo en el editor…, Ctrl+Shift+F) lo abre encima del
+  terminal de ese panel, con pestañas por archivo, resaltado de sintaxis y
+  números de línea (GtkSourceView), Ctrl+S para guardar, Ctrl+W para cerrar la
+  pestaña y Esc para volver al terminal. Marca con ● los archivos con cambios,
+  avisa antes de cerrar sin guardar y recuerda los archivos abiertos con la
+  sesión. Los binarios se abren en solo lectura. Al cerrar el último archivo el
+  terminal recupera todo el panel.
 - **sudo y ssh sin terminal**: cuando `sudo` o `ssh` los ejecuta un programa que
   no tiene terminal (un script, un asistente como Claude Code, una aplicación
   gráfica lanzada desde el panel), en vez de fallar con "a terminal is required
@@ -66,7 +74,7 @@ También aparece como «Pytrol» en el menú de aplicaciones. Para quitarlo:
 Dependencias en Ubuntu/Debian:
 
 ```bash
-sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-vte-2.91
+sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-vte-2.91 gir1.2-gtksource-4
 ```
 
 ```bash
@@ -87,6 +95,8 @@ Todos se cambian en Preferencias → Atajos de teclado.
 | Moverse entre paneles                | Alt+flechas               |
 | Abrir proyecto en este panel         | Ctrl+Shift+O              |
 | Abrir proyecto en nueva pestaña      | Ctrl+Shift+P              |
+| Abrir archivo en el editor           | Ctrl+Shift+F              |
+| Editor: guardar / cerrar / al terminal | Ctrl+S / Ctrl+W / Esc   |
 | Copiar / Pegar / Seleccionar todo    | Ctrl+Shift+C / V / A      |
 | Limpiar terminal                     | Ctrl+Shift+L              |
 | Zoom                                 | Ctrl + / Ctrl - / Ctrl 0  |
@@ -98,8 +108,9 @@ Todos se cambian en Preferencias → Atajos de teclado.
 ## Construir el Flatpak
 
 Se compila con `org.flatpak.Builder`, la misma herramienta (y el mismo linter)
-que usa Flathub. El runtime de GNOME no incluye VTE, así que el manifest lo
-compila como módulo (variante GTK 3); la primera compilación tarda unos minutos.
+que usa Flathub. El runtime de GNOME no incluye VTE ni GtkSourceView 4, así que
+el manifest los compila como módulos (variantes GTK 3); la primera compilación
+tarda unos minutos.
 
 ```bash
 sudo apt install flatpak

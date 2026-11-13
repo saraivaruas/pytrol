@@ -16,6 +16,7 @@
       <li>Paneles divisibles en 2, 4, 6 u 8, vertical u horizontalmente, con navegación Alt+flechas</li>
       <li>Un proyecto distinto en cada panel, con cabecera que muestra la carpeta y lista de proyectos recientes</li>
       <li>Árbol de carpetas y archivos propio en cada panel, que se actualiza solo y sigue al directorio del terminal</li>
+      <li>Editor integrado por panel con pestañas, resaltado de sintaxis y guardado con Ctrl+S</li>
       <li>Barra de menú completa y atajos de teclado configurables desde Preferencias</li>
       <li>Fuente, esquema de colores, cursor e historial configurables</li>
       <li>Sesión persistente: restaura pestañas, paneles, carpetas y el contenido de cada terminal tras cerrar o ante un cierre inesperado</li>
@@ -32,11 +33,14 @@
   <screenshots>
     <screenshot type="default">
       <image>https://raw.githubusercontent.com/saraivaruas/pytrol/main/data/screenshots/main.png</image>
-      <caption>Cuatro paneles, cada uno con su proyecto y su árbol de archivos</caption>
+      <caption>Cuatro paneles, cada uno con su proyecto, su árbol de archivos y su editor</caption>
     </screenshot>
   </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.6.0" date="2026-11-13">
+      <description><p>Editor de archivos integrado en cada panel: doble clic en el árbol abre el archivo encima del terminal, con pestañas, resaltado de sintaxis, números de línea, guardado con Ctrl+S y aviso de cambios sin guardar. Los archivos abiertos se recuerdan con la sesión.</p></description>
+    </release>
     <release version="0.5.1" date="2026-11-13">
       <description><p>sudo y ssh funcionan también desde programas sin terminal (scripts, asistentes como Claude Code, aplicaciones lanzadas desde el terminal): Pytrol muestra una ventana para la contraseña en lugar del error "a terminal is required".</p></description>
     </release>

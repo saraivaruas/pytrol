@@ -15,9 +15,9 @@ BIN="$PREFIX/bin"; APPS="$PREFIX/share/applications"
 ICONS="$PREFIX/share/icons/hicolor/scalable/apps"; META="$PREFIX/share/metainfo"
 
 echo "→ Comprobando dependencias (python3-gi, GTK 3, VTE 2.91)…"
-if ! python3 -c "import gi; gi.require_version('Gtk','3.0'); gi.require_version('Vte','2.91'); from gi.repository import Gtk, Vte" 2>/dev/null; then
+if ! python3 -c "import gi; gi.require_version('Gtk','3.0'); gi.require_version('Vte','2.91'); gi.require_version('GtkSource','4'); from gi.repository import Gtk, Vte, GtkSource" 2>/dev/null; then
   echo "   Faltan dependencias. Instalando con apt…"
-  sudo apt-get install -y python3-gi gir1.2-gtk-3.0 gir1.2-vte-2.91
+  sudo apt-get install -y python3-gi gir1.2-gtk-3.0 gir1.2-vte-2.91 gir1.2-gtksource-4
 fi
 
 echo "→ Instalando en $PREFIX"

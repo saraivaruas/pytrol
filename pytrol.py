@@ -15,6 +15,14 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("Vte", "2.91")
 from gi.repository import Gdk, Gio, GLib, Gtk, Pango, Vte  # noqa: E402
 
+try:  # Resaltado de sintaxis (opcional): GtkSourceView 4 es la variante para GTK 3
+    gi.require_version("GtkSource", "4")
+    from gi.repository import GtkSource  # noqa: E402
+    HAVE_GTKSOURCE = True
+except (ValueError, ImportError):
+    GtkSource = None
+    HAVE_GTKSOURCE = False
+
 APP_TITLE = "Pytrol"
 APP_ID = "io.github.saraivaruas.Pytrol"
 IN_FLATPAK = os.path.exists("/.flatpak-info")
@@ -63,6 +71,9 @@ ACTIONS = [
     ("open_project_split_v", "Abrir proyecto en nuevo panel (vertical)…", ""),
     ("open_project_split_h", "Abrir proyecto en nuevo panel (horizontal)…", ""),
     ("open_project_tab", "Abrir proyecto en nueva pestaña…", "<Primary><Shift>p"),
+    ("open_file", "Abrir archivo en el editor…", "<Primary><Shift>f"),
+    ("save_file", "Guardar archivo del editor", ""),
+    ("close_file", "Cerrar archivo del editor", ""),
     ("copy", "Copiar", "<Primary><Shift>c"),
     ("paste", "Pegar", "<Primary><Shift>v"),
     ("select_all", "Seleccionar todo", "<Primary><Shift>a"),
@@ -106,6 +117,7 @@ DEFAULT_CONFIG = {
     "tree_width": 220,
     "tree_show_hidden": False,
     "askpass": True,
+    "editor_height": 340,
     "window_size": [1000, 620],
     "restore_session": True,
     "confirm_close": 2,
@@ -327,12 +339,23 @@ class Pane(Gtk.Box):
                                   adjustment=self.term.get_vadjustment())
         hbox.pack_start(scrollbar, False, False, 0)
 
+        # Editor integrado (pestañas por archivo) encima del terminal; oculto si no hay archivos.
+        self.editor_nb = Gtk.Notebook()
+        self.editor_nb.set_scrollable(True)
+        self.editor_nb.set_show_border(False)
+        self.editor_nb.get_style_context().add_class("editor-tabs")
+        self.editor_nb.set_no_show_all(True)
+        self.vsplit = Gtk.Paned(orientation=Gtk.Orientation.VERTICAL)
+        self.vsplit.pack1(self.editor_nb, True, False)
+        self.vsplit.pack2(hbox, True, False)
+        self.vsplit.set_position(int(app.cfg.get("editor_height", 340)))
+
         # Cada panel lleva su propio árbol de proyecto a la izquierda del terminal.
         self.tree = ProjectTree(app, self)
         self.tree_visible = None  # None = seguir la opción global
         self.body = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         self.body.pack1(self.tree, False, False)
-        self.body.pack2(hbox, True, False)
+        self.body.pack2(self.vsplit, True, False)
         self.body.set_position(int(app.cfg.get("tree_width", 220)))
         self.pack_start(self.body, True, True, 0)
 
@@ -426,6 +449,8 @@ class Pane(Gtk.Box):
             print(f"No se pudo iniciar el shell: {error}", file=sys.stderr)
 
     def apply_config(self, cfg):
+        for e in getattr(self, "editor_nb", None) and self.editors() or []:
+            e.apply_config(cfg)
         t = self.term
         t.set_font(Pango.FontDescription(cfg["font"]))
         t.set_scrollback_lines(int(cfg["scrollback"]))
@@ -479,6 +504,70 @@ class Pane(Gtk.Box):
             return self.project_root
         return self.cwd_or_last()
 
+    # ---- editor integrado
+    def editors(self):
+        return [self.editor_nb.get_nth_page(i) for i in range(self.editor_nb.get_n_pages())]
+
+    def current_editor(self):
+        i = self.editor_nb.get_current_page()
+        return self.editor_nb.get_nth_page(i) if i >= 0 else None
+
+    def unsaved_files(self):
+        return [e.path for e in self.editors() if e.is_modified()]
+
+    def open_file(self, path):
+        path = os.path.abspath(path)
+        for e in self.editors():
+            if e.path == path:
+                self.editor_nb.set_current_page(self.editor_nb.page_num(e))
+                e.view.grab_focus()
+                return e
+        editor = FileEditor(self, path)
+        label = Gtk.Label(label=os.path.basename(path))
+        label.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
+        label.set_width_chars(min(len(os.path.basename(path)), 10))
+        label.set_max_width_chars(28)
+        label.set_tooltip_text(path)
+        close = Gtk.Button.new_from_icon_name("window-close-symbolic", Gtk.IconSize.MENU)
+        close.set_relief(Gtk.ReliefStyle.NONE)
+        close.set_focus_on_click(False)
+        close.connect("clicked", lambda *_: self.close_editor(editor))
+        box = Gtk.Box(spacing=4)
+        box.pack_start(label, True, True, 0)
+        box.pack_start(close, False, False, 0)
+        box.show_all()
+        editor.tab_label = label
+        editor.show_all()
+        idx = self.editor_nb.append_page(editor, box)
+        self.editor_nb.set_tab_reorderable(editor, True)
+        self.editor_nb.set_current_page(idx)
+        self.editor_nb.show()
+        editor.view.grab_focus()
+        self.app.save_session()
+        return editor
+
+    def refresh_editor_tab(self, editor):
+        name = os.path.basename(editor.path)
+        editor.tab_label.set_text(("● " if editor.is_modified() else "") + name)
+
+    def close_editor(self, editor, force=False):
+        """Cierra una pestaña del editor; pregunta si tiene cambios sin guardar."""
+        if editor.is_modified() and not force:
+            choice = self.app.ask_save(os.path.basename(editor.path))
+            if choice == "cancel":
+                return False
+            if choice == "save" and not editor.save():
+                return False
+        idx = self.editor_nb.page_num(editor)
+        if idx >= 0:
+            self.editor_nb.remove_page(idx)
+        editor.destroy()
+        if self.editor_nb.get_n_pages() == 0:
+            self.editor_nb.hide()
+            self.term.grab_focus()
+        self.app.save_session()
+        return True
+
     def tree_shown(self):
         return self.app.cfg.get("show_tree", True) if self.tree_visible is None else self.tree_visible
 
@@ -507,6 +596,130 @@ class Pane(Gtk.Box):
         if cwd:
             self.last_cwd = cwd
         return self.last_cwd
+
+
+class FileEditor(Gtk.Box):
+    """Un archivo abierto en el editor integrado de un panel."""
+
+    def __init__(self, pane, path):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL)
+        self.pane = pane
+        self.path = os.path.abspath(path)
+        self.readonly = False
+        if HAVE_GTKSOURCE:
+            self.buffer = GtkSource.Buffer()
+            self.view = GtkSource.View(buffer=self.buffer)
+            self.view.set_show_line_numbers(True)
+            self.view.set_highlight_current_line(True)
+            self.view.set_auto_indent(True)
+            self.view.set_tab_width(4)
+            self.view.set_smart_home_end(GtkSource.SmartHomeEndType.BEFORE)
+            lang = GtkSource.LanguageManager.get_default().guess_language(self.path, None)
+            if lang:
+                self.buffer.set_language(lang)
+        else:
+            self.buffer = Gtk.TextBuffer()
+            self.view = Gtk.TextView(buffer=self.buffer)
+        self.view.set_monospace(True)
+        self.view.set_left_margin(6)
+        self.view.set_right_margin(6)
+        self.apply_config(pane.app.cfg)
+        self.view.connect("key-press-event", self.on_key)
+        self.view.connect("focus-in-event", lambda *_: pane.app.on_pane_focus(pane))
+        sw = Gtk.ScrolledWindow()
+        sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        sw.add(self.view)
+        self.pack_start(sw, True, True, 0)
+        self.status = Gtk.Label(xalign=0)
+        self.status.get_style_context().add_class("editor-status")
+        self.pack_start(self.status, False, False, 0)
+        self.load()
+        self.buffer.connect("modified-changed", lambda *_: self.pane.refresh_editor_tab(self))
+        self.buffer.connect("notify::cursor-position", lambda *_: self.update_status())
+
+    # ---- archivo
+    def load(self):
+        try:
+            with open(self.path, "rb") as fh:
+                raw = fh.read()
+        except OSError as exc:
+            raw = b""
+            self.readonly = True
+            self.status.set_text(f"No se pudo leer: {exc}")
+        if b"\0" in raw[:8000]:
+            self.readonly = True
+            text = f"(archivo binario, {len(raw)} bytes; no se puede editar aquí)"
+        else:
+            text = raw.decode("utf-8", errors="replace")
+        self.buffer.begin_not_undoable_action() if HAVE_GTKSOURCE else None
+        self.buffer.set_text(text)
+        self.buffer.end_not_undoable_action() if HAVE_GTKSOURCE else None
+        self.buffer.set_modified(False)
+        self.view.set_editable(not self.readonly)
+        self.buffer.place_cursor(self.buffer.get_start_iter())
+        self.update_status()
+
+    def save(self):
+        if self.readonly:
+            return False
+        start, end = self.buffer.get_bounds()
+        text = self.buffer.get_text(start, end, True)
+        try:
+            tmp = self.path + ".pytrol-tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            try:
+                os.chmod(tmp, os.stat(self.path).st_mode & 0o7777)
+            except OSError:
+                pass
+            os.replace(tmp, self.path)
+        except OSError as exc:
+            self.pane.app.message(f"No se pudo guardar {self.path}", str(exc))
+            return False
+        self.buffer.set_modified(False)
+        self.update_status("Guardado")
+        return True
+
+    def is_modified(self):
+        return self.buffer.get_modified()
+
+    # ---- interfaz
+    def apply_config(self, cfg):
+        self.view.override_font(Pango.FontDescription(cfg["font"]))
+        if HAVE_GTKSOURCE:
+            dark = cfg.get("scheme") != "Claro"
+            sm = GtkSource.StyleSchemeManager.get_default()
+            names = ("oblivion", "solarized-dark", "cobalt", "classic") if dark else ("tango", "classic", "kate")
+            for name in names:
+                scheme = sm.get_scheme(name)
+                if scheme:
+                    self.buffer.set_style_scheme(scheme)
+                    break
+
+    def update_status(self, note=""):
+        it = self.buffer.get_iter_at_mark(self.buffer.get_insert())
+        parts = [f"Línea {it.get_line() + 1}, col {it.get_line_offset() + 1}"]
+        if self.readonly:
+            parts.append("solo lectura")
+        if note:
+            parts.append(note)
+        parts.append(self.path)
+        self.status.set_text("  ·  ".join(parts))
+
+    def on_key(self, _view, event):
+        mask = Gtk.accelerator_get_default_mod_mask()
+        state = event.state & mask
+        key = Gdk.keyval_to_lower(event.keyval)
+        if state == Gdk.ModifierType.CONTROL_MASK and key == Gdk.KEY_s:
+            self.save()
+            return True
+        if state == Gdk.ModifierType.CONTROL_MASK and key == Gdk.KEY_w:
+            self.pane.close_editor(self)
+            return True
+        if event.keyval == Gdk.KEY_Escape:
+            self.pane.term.grab_focus()
+            return True
+        return False
 
 
 class ProjectTree(Gtk.Box):
@@ -713,7 +926,7 @@ class ProjectTree(Gtk.Box):
         if is_dir:
             self.app.terminal_cd(path, self.pane)
         else:
-            self.open_with_default(path)
+            self.pane.open_file(path)
 
     def open_with_default(self, path):
         try:
@@ -746,6 +959,7 @@ class ProjectTree(Gtk.Box):
             add("Hacer raíz del árbol", lambda: self.set_root(path, force=True))
             add("Abrir como proyecto de este panel", lambda: self.app.open_project_in(self.pane, path))
         else:
+            add("Abrir en el editor de este panel", lambda: self.pane.open_file(path))
             add("Abrir con la aplicación predeterminada", lambda: self.open_with_default(path))
             add("Ir a su carpeta en el terminal", lambda: self.app.terminal_cd(folder, self.pane))
         add("Insertar ruta en el terminal", lambda: self.app.terminal_insert(path, self.pane))
@@ -849,6 +1063,8 @@ class Pytrol(Gtk.Window):
             .project-tree treeview { background-color: #232323; color: #d8d8d8; }
             .project-tree treeview:selected { background-color: #3b5a8a; color: #ffffff; }
             .project-tree scrolledwindow { border-right: 1px solid #444; }
+            .editor-status { background: #2d2d2d; color: #bbbbbb; font-size: 0.8em; padding: 1px 6px; }
+            .editor-tabs tab { padding: 1px 6px; }
         """)
         Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), css,
                                                  Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
@@ -902,6 +1118,10 @@ class Pytrol(Gtk.Window):
             if w.tree_visible is not None:
                 node["tree"] = w.tree_visible
             node["tree_width"] = w.body.get_position()
+            files = [e.path for e in w.editors()]
+            if files:
+                node["files"] = files
+                node["editor_height"] = w.vsplit.get_position()
             if self.cfg.get("restore_scrollback", True):
                 text = w.scrollback_text(int(self.cfg.get("restore_scrollback_lines", 5000)))
                 if text:
@@ -953,12 +1173,23 @@ class Pytrol(Gtk.Window):
             pane.tree_visible = node.get("tree")
             if node.get("tree_width"):
                 pane.body.set_position(int(node["tree_width"]))
+            files = [f for f in node.get("files", []) if os.path.isfile(f)]
+            if files:
+                if node.get("editor_height"):
+                    pane.vsplit.set_position(int(node["editor_height"]))
+                GLib.idle_add(self._reopen_files, pane, files)
             return pane
         orient = Gtk.Orientation.HORIZONTAL if node.get("orientation") == "h" else Gtk.Orientation.VERTICAL
         paned = SplitPaned(orient, float(node.get("fraction", 0.5)))
         paned.pack1(self._build_widget(node.get("a")), True, False)
         paned.pack2(self._build_widget(node.get("b")), True, False)
         return paned
+
+    def _reopen_files(self, pane, files):
+        for f in files:
+            pane.open_file(f)
+        pane.term.grab_focus()
+        return False
 
     def restore_session(self):
         data = load_session()
@@ -998,6 +1229,13 @@ class Pytrol(Gtk.Window):
     def confirm_quit(self):
         """Pide confirmación tantas veces como diga la configuración (por defecto 2)."""
         times = int(self.cfg.get("confirm_close", 2))
+        unsaved = [f for p in self.all_panes() for f in p.unsaved_files()]
+        if unsaved and not self._ask("Hay archivos sin guardar",
+                                     "\n".join(os.path.basename(f) for f in unsaved[:8])
+                                     + ("\n…" if len(unsaved) > 8 else "")
+                                     + "\n\nSi cierras ahora, esos cambios se perderán.",
+                                     "Cerrar sin guardar"):
+            return False
         n_tabs, n_panes = self.notebook.get_n_pages(), self._count_panes()
         prompts = [
             ("¿Cerrar Pytrol?", f"Hay {n_tabs} pestaña(s) y {n_panes} panel(es) abiertos. "
@@ -1055,6 +1293,7 @@ class Pytrol(Gtk.Window):
 
         mb.append(self._submenu("Archivo", [
             self._item("new_tab"), self._item("open_project_tab"), None,
+            self._item("open_file"), self._item("save_file"), self._item("close_file"), None,
             self._item("close_tab"), None, self._item("quit")]))
 
         layouts = Gtk.Menu()
@@ -1164,6 +1403,8 @@ class Pytrol(Gtk.Window):
         return tab
 
     def close_tab(self, tab, force=False):
+        if self._quitting:
+            return
         if not force:
             if self.notebook.get_n_pages() == 1:
                 # Última pestaña: cerrar la app, con la confirmación habitual.
@@ -1217,8 +1458,15 @@ class Pytrol(Gtk.Window):
         return new_pane
 
     def close_pane(self, pane, from_exit=False):
+        if self._quitting:
+            return  # la ventana se está destruyendo: no reescribir la sesión panel a panel
         tab = pane.get_ancestor(Tab)
         if tab is None:
+            return
+        if pane.unsaved_files() and not self._ask(
+                "Hay archivos sin guardar en este panel",
+                "\n".join(os.path.basename(f) for f in pane.unsaved_files()[:8]) + "\n\nSe perderán los cambios.",
+                "Cerrar sin guardar"):
             return
         parent = pane.get_parent()
         if isinstance(parent, Gtk.Paned):
@@ -1323,6 +1571,37 @@ class Pytrol(Gtk.Window):
             self.set_title(f"{title} - {APP_TITLE}")
 
     # ---------------------------------------------------------- proyectos
+    def choose_file(self, pane):
+        dlg = Gtk.FileChooserDialog(title="Abrir archivo en el editor", parent=self,
+                                    action=Gtk.FileChooserAction.OPEN)
+        dlg.add_buttons("Cancelar", Gtk.ResponseType.CANCEL, "Abrir", Gtk.ResponseType.OK)
+        start = pane.tree_root() if pane else None
+        if start and os.path.isdir(start):
+            dlg.set_current_folder(start)
+        path = dlg.get_filename() if dlg.run() == Gtk.ResponseType.OK else None
+        dlg.destroy()
+        return path
+
+    def ask_save(self, name):
+        """Devuelve 'save', 'discard' o 'cancel'."""
+        dlg = Gtk.MessageDialog(transient_for=self, modal=True, message_type=Gtk.MessageType.QUESTION,
+                                buttons=Gtk.ButtonsType.NONE, text=f"¿Guardar los cambios de «{name}»?")
+        dlg.format_secondary_text("Si no los guardas, se perderán.")
+        dlg.add_button("Descartar", 1)
+        dlg.add_button("Cancelar", Gtk.ResponseType.CANCEL)
+        dlg.add_button("Guardar", 2)
+        dlg.set_default_response(2)
+        resp = dlg.run()
+        dlg.destroy()
+        return {1: "discard", 2: "save"}.get(resp, "cancel")
+
+    def message(self, title, text):
+        dlg = Gtk.MessageDialog(transient_for=self, modal=True, message_type=Gtk.MessageType.ERROR,
+                                buttons=Gtk.ButtonsType.OK, text=title)
+        dlg.format_secondary_text(text)
+        dlg.run()
+        dlg.destroy()
+
     def choose_folder(self, title="Abrir proyecto"):
         dlg = Gtk.FileChooserDialog(title=title, parent=self,
                                     action=Gtk.FileChooserAction.SELECT_FOLDER)
@@ -1420,8 +1699,9 @@ class Pytrol(Gtk.Window):
         return False
 
     def on_destroy(self, *_):
-        if self.notebook.get_n_pages() > 0:
-            self.save_session()
+        if not self._quitting and self.notebook.get_n_pages() > 0:
+            self.save_session()  # cierre no previsto por quit(): guardar ahora
+        self._quitting = True
         save_config(self.cfg)
         Gtk.main_quit()
 
@@ -1457,6 +1737,12 @@ class Pytrol(Gtk.Window):
         elif a == "zoom_reset" and term: term.set_font_scale(1.0)
         elif a == "toggle_menubar": self.toggle_menubar()
         elif a == "toggle_tree": self.toggle_tree()
+        elif a == "open_file" and pane:
+            path = self.choose_file(pane)
+            if path:
+                pane.open_file(path)
+        elif a == "save_file" and pane and pane.current_editor(): pane.current_editor().save()
+        elif a == "close_file" and pane and pane.current_editor(): pane.close_editor(pane.current_editor())
         elif a == "pin_tree" and pane: pane.tree.set_pinned(not pane.tree.pinned)
         elif a == "tree_show_hidden": self.set_tree_hidden(not self.cfg.get("tree_show_hidden", False))
         elif a == "fullscreen": self.toggle_fullscreen()
@@ -1500,7 +1786,7 @@ class Pytrol(Gtk.Window):
         menu.popup_at_pointer(event)
 
     def show_about(self, *_):
-        dlg = Gtk.AboutDialog(transient_for=self, program_name=APP_TITLE, version="0.5.1",
+        dlg = Gtk.AboutDialog(transient_for=self, program_name=APP_TITLE, version="0.6.0",
                               comments="Advanced Python Terminal: Power, Speed, Control.\nPaneles, proyectos y pestañas en un solo lugar.",
                               logo_icon_name=APP_ID, license_type=Gtk.License.MIT_X11)
         dlg.run()

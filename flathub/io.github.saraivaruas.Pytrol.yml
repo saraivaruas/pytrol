@@ -66,6 +66,20 @@ modules:
         url: https://gitlab.gnome.org/GNOME/vte/-/archive/0.84.1/vte-0.84.1.tar.gz
         sha256: 9f73468982a339cd1eb942beb7d348a5564c9ed48473ad1690c791f8474916ec
 
+  # Editor integrado: GtkSourceView 4 (variante GTK 3; el runtime solo trae la 5, para GTK 4).
+  - name: gtksourceview
+    buildsystem: meson
+    config-opts:
+      - -Dgir=true
+      - -Dvapi=false
+      - -Dgtk_doc=false
+      - -Dglade_catalog=false
+      - -Dinstall_tests=false
+    sources:
+      - type: archive
+        url: https://download.gnome.org/sources/gtksourceview/4.8/gtksourceview-4.8.4.tar.xz
+        sha256: 7ec9d18fb283d1f84a3a3eff3b7a72b09a10c9c006597b3fbabbb5958420a87d
+
   - name: pytrol
     buildsystem: simple
     build-commands:
