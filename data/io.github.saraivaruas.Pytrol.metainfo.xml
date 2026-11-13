@@ -38,6 +38,9 @@
   </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.6.1" date="2026-11-13">
+      <description><p>Pegar desde el portapapeles funciona en todos lados: Ctrl+Shift+V, el menú Editar y el menú contextual actúan sobre el editor o el terminal que tenga el foco, y Shift+Insert también pega en el terminal.</p></description>
+    </release>
     <release version="0.6.0" date="2026-11-13">
       <description><p>Editor de archivos integrado en cada panel: doble clic en el árbol abre el archivo encima del terminal, con pestañas, resaltado de sintaxis, números de línea, guardado con Ctrl+S y aviso de cambios sin guardar. Los archivos abiertos se recuerdan con la sesión.</p></description>
     </release>

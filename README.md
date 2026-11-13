@@ -98,6 +98,8 @@ Todos se cambian en Preferencias → Atajos de teclado.
 | Abrir archivo en el editor           | Ctrl+Shift+F              |
 | Editor: guardar / cerrar / al terminal | Ctrl+S / Ctrl+W / Esc   |
 | Copiar / Pegar / Seleccionar todo    | Ctrl+Shift+C / V / A      |
+| Pegar en el terminal (alternativa)   | Shift+Insert, clic central (selección) |
+| Pegar en el editor                   | Ctrl+V, Ctrl+Shift+V o Shift+Insert |
 | Limpiar terminal                     | Ctrl+Shift+L              |
 | Zoom                                 | Ctrl + / Ctrl - / Ctrl 0  |
 | Mostrar u ocultar barra de menú      | Ctrl+Shift+M              |

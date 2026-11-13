@@ -1696,7 +1696,30 @@ class Pytrol(Gtk.Window):
                 self.do_action(action_id); return True
             if action_id == "zoom_out" and state == mods and event.keyval == Gdk.KEY_KP_Subtract:
                 self.do_action(action_id); return True
+        # Shift+Insert pega en el terminal (como en la mayoría de los terminales)
+        if state == Gdk.ModifierType.SHIFT_MASK and event.keyval in (Gdk.KEY_Insert, Gdk.KEY_KP_Insert) \
+                and isinstance(self.get_focus(), Vte.Terminal):
+            self.do_action("paste"); return True
         return False
+
+    def edit_action(self, action_id, term):
+        """Copiar/pegar/seleccionar sobre el widget con foco: editor, campo de texto o terminal."""
+        fw = self.get_focus()
+        if isinstance(fw, Gtk.TextView):
+            if action_id == "copy": fw.emit("copy-clipboard")
+            elif action_id == "paste": fw.emit("paste-clipboard")
+            else: fw.emit("select-all", True)
+            return
+        if isinstance(fw, Gtk.Editable):
+            if action_id == "copy": fw.copy_clipboard()
+            elif action_id == "paste": fw.paste_clipboard()
+            else: fw.select_region(0, -1)
+            return
+        if term is None:
+            return
+        if action_id == "copy": term.copy_clipboard_format(Vte.Format.TEXT)
+        elif action_id == "paste": term.paste_clipboard()
+        else: term.select_all()
 
     def on_destroy(self, *_):
         if not self._quitting and self.notebook.get_n_pages() > 0:
@@ -1728,9 +1751,7 @@ class Pytrol(Gtk.Window):
         elif a == "open_project_split_v": self.open_project_dialog("split_v")
         elif a == "open_project_split_h": self.open_project_dialog("split_h")
         elif a == "open_project_tab": self.open_project_dialog("tab")
-        elif a == "copy" and term: term.copy_clipboard_format(Vte.Format.TEXT)
-        elif a == "paste" and term: term.paste_clipboard()
-        elif a == "select_all" and term: term.select_all()
+        elif a in ("copy", "paste", "select_all"): self.edit_action(a, term)
         elif a == "clear" and term: term.reset(True, True)
         elif a == "zoom_in" and term: self.zoom(term, 1.1)
         elif a == "zoom_out" and term: self.zoom(term, 1 / 1.1)
@@ -1786,7 +1807,7 @@ class Pytrol(Gtk.Window):
         menu.popup_at_pointer(event)
 
     def show_about(self, *_):
-        dlg = Gtk.AboutDialog(transient_for=self, program_name=APP_TITLE, version="0.6.0",
+        dlg = Gtk.AboutDialog(transient_for=self, program_name=APP_TITLE, version="0.6.1",
                               comments="Advanced Python Terminal: Power, Speed, Control.\nPaneles, proyectos y pestañas en un solo lugar.",
                               logo_icon_name=APP_ID, license_type=Gtk.License.MIT_X11)
         dlg.run()
