@@ -17,7 +17,7 @@
       <li>Un proyecto distinto en cada panel, con cabecera que muestra la carpeta y lista de proyectos recientes</li>
       <li>Barra de menú completa y atajos de teclado configurables desde Preferencias</li>
       <li>Fuente, esquema de colores, cursor e historial configurables</li>
-      <li>Sesión persistente: restaura pestañas, paneles y carpetas tras un cierre inesperado</li>
+      <li>Sesión persistente: restaura pestañas, paneles, carpetas y el contenido de cada terminal tras cerrar o ante un cierre inesperado</li>
       <li>Cierre seguro con doble confirmación configurable</li>
       <li>Zoom con Ctrl + / Ctrl -, pantalla completa con F11</li>
       <li>Menú contextual con copiar, pegar y limpiar</li>
@@ -35,6 +35,9 @@
   </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.4.0" date="2026-11-13">
+      <description><p>Cada terminal conserva lo escrito al cerrar (pantalla e historial) y lo muestra de nuevo al reabrir, salvo que se haya limpiado con clear. La restauración de sesión ya no arranca shells temporales.</p></description>
+    </release>
     <release version="0.3.1" date="2026-11-11">
       <description><p>Flatpak: el shell del anfitrión obtiene su terminal de control (control de trabajos, sin el aviso "can't access tty") y se usa el shell real del usuario en lugar de /bin/sh.</p></description>
     </release>

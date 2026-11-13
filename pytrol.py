@@ -96,6 +96,8 @@ DEFAULT_CONFIG = {
     "shell": "",
     "show_menubar": True,
     "show_pane_headers": True,
+    "restore_scrollback": True,
+    "restore_scrollback_lines": 5000,
     "window_size": [1000, 620],
     "restore_session": True,
     "confirm_close": 2,
@@ -220,9 +222,10 @@ class SplitPaned(Gtk.Paned):
 class Pane(Gtk.Box):
     """Un panel: cabecera opcional + terminal VTE + barra de desplazamiento."""
 
-    def __init__(self, app, cwd=None):
+    def __init__(self, app, cwd=None, restore_text=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.app = app
+        self.restore_text = restore_text
         self.header = Gtk.Label(xalign=0)
         self.header.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
         self.header.get_style_context().add_class("pane-header")
@@ -249,6 +252,44 @@ class Pane(Gtk.Box):
         self.term.connect("child-exited", lambda *_: app.close_pane(self, from_exit=True))
         self.spawn(cwd)
 
+    def replay(self, text):
+        """Vuelca el contenido de la sesión anterior en el terminal (solo visual)."""
+        lines = text.split("\n")
+        data = "\r\n".join(lines)
+        sep = "\r\n\x1b[2m\u2500\u2500 sesi\u00f3n anterior restaurada \u2500\u2500\x1b[0m\r\n"
+        self.term.feed((data + sep).encode("utf-8", "replace"))
+
+    def scrollback_text(self, max_lines):
+        """Texto de todo el terminal (historial + pantalla), sin l\u00edneas vac\u00edas finales."""
+        t = self.term
+        try:
+            adj = t.get_vadjustment()
+            first, last = int(adj.get_lower()), max(int(adj.get_upper()) - 1, 0)
+            cols = t.get_column_count()
+            if hasattr(t, "get_text_range_format"):
+                res = t.get_text_range_format(Vte.Format.TEXT, first, 0, last, cols)
+            else:
+                res = t.get_text_range(first, 0, last, cols, None, None)
+            text = res[0] if isinstance(res, (tuple, list)) else res
+            if not (text or "").strip():
+                # Tras `clear` (secuencia E3) la lectura por rango devuelve vacío aunque
+                # la pantalla tenga texto nuevo: usar la pantalla visible como respaldo.
+                if hasattr(t, "get_text_format"):
+                    text = t.get_text_format(Vte.Format.TEXT)
+                else:
+                    text = t.get_text(None, None)[0]
+        except Exception as exc:  # noqa: BLE001 - nunca romper el guardado por esto
+            print(f"No se pudo leer el contenido del terminal: {exc}", file=sys.stderr)
+            return ""
+        if not text:
+            return ""
+        lines = [l.rstrip() for l in text.split("\n")]
+        while lines and not lines[-1]:
+            lines.pop()
+        if max_lines and len(lines) > max_lines:
+            lines = lines[-max_lines:]
+        return "\n".join(lines)
+
     def spawn(self, cwd):
         cwd = cwd or os.path.expanduser("~")
         if not os.path.isdir(cwd):
@@ -272,7 +313,16 @@ class Pane(Gtk.Box):
         else:
             argv = shlex.split(shell)
         self.term.spawn_async(flags, cwd, argv, envv,
-                              GLib.SpawnFlags.SEARCH_PATH, None, None, -1, None, None, None)
+                              GLib.SpawnFlags.SEARCH_PATH, None, None, -1, None, self._on_spawned, None)
+
+    def _on_spawned(self, term, pid, error, *_):
+        # VTE reinicia el buffer al asignar la pty; por eso el contenido anterior se
+        # vuelca aquí, ya con la pty asignada y antes de que el shell escriba su prompt.
+        if self.restore_text:
+            self.replay(self.restore_text)
+            self.restore_text = None
+        if error:
+            print(f"No se pudo iniciar el shell: {error}", file=sys.stderr)
 
     def apply_config(self, cfg):
         t = self.term
@@ -404,7 +454,12 @@ class Pytrol(Gtk.Window):
     # ---------------------------------------------------------- sesión
     def _serialize_widget(self, w):
         if isinstance(w, Pane):
-            return {"type": "pane", "cwd": w.cwd_or_last()}
+            node = {"type": "pane", "cwd": w.cwd_or_last()}
+            if self.cfg.get("restore_scrollback", True):
+                text = w.scrollback_text(int(self.cfg.get("restore_scrollback_lines", 5000)))
+                if text:
+                    node["screen"] = text
+            return node
         if isinstance(w, Gtk.Paned):
             alloc = w.get_allocation()
             size = alloc.width if w.get_orientation() == Gtk.Orientation.HORIZONTAL else alloc.height
@@ -446,7 +501,8 @@ class Pytrol(Gtk.Window):
         if not node:
             return Pane(self)
         if node.get("type") == "pane":
-            return Pane(self, node.get("cwd"))
+            text = node.get("screen") if self.cfg.get("restore_scrollback", True) else None
+            return Pane(self, node.get("cwd"), restore_text=text)
         orient = Gtk.Orientation.HORIZONTAL if node.get("orientation") == "h" else Gtk.Orientation.VERTICAL
         paned = SplitPaned(orient, float(node.get("fraction", 0.5)))
         paned.pack1(self._build_widget(node.get("a")), True, False)
@@ -459,12 +515,7 @@ class Pytrol(Gtk.Window):
             return False
         try:
             for tdata in data["tabs"]:
-                tab = self.new_tab(inherit_cwd=False)
-                first = tab.panes()[0]
-                tab.remove(first)
-                first.destroy()
-                root = self._build_widget(tdata.get("layout"))
-                tab.pack_start(root, True, True, 0)
+                tab = self.new_tab(root=self._build_widget(tdata.get("layout")))
                 tab.show_all()
                 panes = tab.panes()
                 idx = int(tdata.get("focused", 0))
@@ -627,13 +678,17 @@ class Pytrol(Gtk.Window):
             tab.focused = panes[0] if panes else None
         return tab.focused
 
-    def new_tab(self, cwd=None, inherit_cwd=True):
-        if cwd is None and inherit_cwd and self.current_pane():
-            cwd = self.current_pane().cwd()
+    def new_tab(self, cwd=None, inherit_cwd=True, root=None):
+        """Nueva pestaña con un panel, o con un árbol de paneles ya construido (`root`)."""
+        if root is None:
+            if cwd is None and inherit_cwd and self.current_pane():
+                cwd = self.current_pane().cwd()
+            root = Pane(self, cwd)
         tab = Tab()
-        pane = Pane(self, cwd)
-        tab.pack_start(pane, True, True, 0)
-        tab.focused = pane
+        tab.pack_start(root, True, True, 0)
+        panes = tab.panes()
+        tab.focused = panes[0] if panes else None
+        pane = tab.focused
 
         close = Gtk.Button.new_from_icon_name("window-close-symbolic", Gtk.IconSize.MENU)
         close.set_relief(Gtk.ReliefStyle.NONE)
@@ -975,7 +1030,7 @@ class Pytrol(Gtk.Window):
         menu.popup_at_pointer(event)
 
     def show_about(self, *_):
-        dlg = Gtk.AboutDialog(transient_for=self, program_name=APP_TITLE, version="0.3.1",
+        dlg = Gtk.AboutDialog(transient_for=self, program_name=APP_TITLE, version="0.4.0",
                               comments="Advanced Python Terminal: Power, Speed, Control.\nPaneles, proyectos y pestañas en un solo lugar.",
                               logo_icon_name=APP_ID, license_type=Gtk.License.MIT_X11)
         dlg.run()
@@ -1044,6 +1099,10 @@ class PreferencesDialog(Gtk.Dialog):
         self.headers = Gtk.CheckButton(label="Mostrar cabecera con el proyecto en cada panel",
                                        active=cfg["show_pane_headers"])
         add("", self.headers)
+        self.scrollback_restore = Gtk.CheckButton(
+            label="Conservar lo escrito en cada terminal al cerrar y mostrarlo al reabrir",
+            active=cfg.get("restore_scrollback", True))
+        add("", self.scrollback_restore)
         self.restore = Gtk.CheckButton(label="Restaurar pestañas y paneles al iniciar",
                                        active=cfg.get("restore_session", True))
         add("", self.restore)
@@ -1109,6 +1168,7 @@ class PreferencesDialog(Gtk.Dialog):
         cfg["shell"] = self.shell.get_text().strip()
         cfg["show_menubar"] = self.menubar.get_active()
         cfg["show_pane_headers"] = self.headers.get_active()
+        cfg["restore_scrollback"] = self.scrollback_restore.get_active()
         cfg["restore_session"] = self.restore.get_active()
         cfg["confirm_close"] = self.confirm.get_active()
         cfg["shortcuts"] = {row[0]: row[2] for row in self.store}

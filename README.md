@@ -16,9 +16,12 @@ que GNOME Terminal). Licencia MIT.
 - **Preferencias**: fuente, esquema de colores (qterminal oscuro, Dracula,
   Solarized, claro), cursor, historial, shell y **todos los atajos editables**.
   Se guardan en `~/.config/pytrol/config.json`.
-- **Sesión persistente**: cada 5 segundos guarda pestañas, divisiones y la
-  carpeta de cada panel; si se cierra de golpe (corte de luz, `kill`, cuelgue)
-  al volver a abrir reconstruye todo tal como estaba.
+- **Sesión persistente**: cada 5 segundos guarda pestañas, divisiones, la
+  carpeta de cada panel y **lo escrito en cada terminal** (pantalla e historial,
+  hasta 5000 líneas); al volver a abrir, por cierre normal o de golpe (corte de
+  luz, `kill`, cuelgue), reconstruye todo y muestra el contenido anterior bajo
+  un separador. Si limpiaste con `clear`, se restaura vacío. Se puede desactivar
+  en Preferencias.
 - **Cierre seguro**: al cerrar pregunta dos veces (configurable: ninguna, una o
   dos) para que no se pierda el trabajo por un atajo pulsado sin querer. Si el
   shell termina por sí solo con `exit`, no pregunta.
