@@ -15,6 +15,7 @@
       <li>Pestañas reordenables que heredan el directorio actual</li>
       <li>Paneles divisibles en 2, 4, 6 u 8, vertical u horizontalmente, con navegación Alt+flechas</li>
       <li>Un proyecto distinto en cada panel, con cabecera que muestra la carpeta y lista de proyectos recientes</li>
+      <li>Árbol de carpetas y archivos propio en cada panel, que se actualiza solo y sigue al directorio del terminal</li>
       <li>Barra de menú completa y atajos de teclado configurables desde Preferencias</li>
       <li>Fuente, esquema de colores, cursor e historial configurables</li>
       <li>Sesión persistente: restaura pestañas, paneles, carpetas y el contenido de cada terminal tras cerrar o ante un cierre inesperado</li>
@@ -30,11 +31,14 @@
   <screenshots>
     <screenshot type="default">
       <image>https://raw.githubusercontent.com/saraivaruas/pytrol/main/data/screenshots/main.png</image>
-      <caption>Ventana principal con dos pestañas</caption>
+      <caption>Cuatro paneles, cada uno con su proyecto y su árbol de archivos</caption>
     </screenshot>
   </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.5.0" date="2026-11-13">
+      <description><p>Cada panel lleva su propio árbol de carpetas y archivos del proyecto: se actualiza solo, sigue al directorio del terminal o queda fijado, doble clic entra en la carpeta o abre el archivo, y se oculta por panel o para todos con Ctrl+Shift+E.</p></description>
+    </release>
     <release version="0.4.0" date="2026-11-13">
       <description><p>Cada terminal conserva lo escrito al cerrar (pantalla e historial) y lo muestra de nuevo al reabrir, salvo que se haya limpiado con clear. La restauración de sesión ya no arranca shells temporales.</p></description>
     </release>

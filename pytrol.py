@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Pytrol — Advanced Python Terminal: Power, Speed, Control (GTK3 + VTE)."""
-import glob
 import json
 import os
+import re
 import shlex
 import signal
 import subprocess
@@ -13,7 +13,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("Vte", "2.91")
-from gi.repository import Gdk, GLib, Gtk, Pango, Vte  # noqa: E402
+from gi.repository import Gdk, Gio, GLib, Gtk, Pango, Vte  # noqa: E402
 
 APP_TITLE = "Pytrol"
 APP_ID = "io.github.saraivaruas.Pytrol"
@@ -71,6 +71,9 @@ ACTIONS = [
     ("zoom_reset", "Zoom normal", "<Primary>0"),
     ("toggle_menubar", "Mostrar barra de menú", "<Primary><Shift>m"),
     ("fullscreen", "Pantalla completa", "F11"),
+    ("toggle_tree", "Árboles de proyecto en los paneles", "<Primary><Shift>e"),
+    ("pin_tree", "Fijar carpeta del árbol de este panel", ""),
+    ("tree_show_hidden", "Mostrar archivos ocultos en el árbol", ""),
     ("preferences", "Preferencias…", "<Primary><Shift>comma"),
 ]
 ACTION_LABELS = {a[0]: a[1] for a in ACTIONS}
@@ -98,6 +101,9 @@ DEFAULT_CONFIG = {
     "show_pane_headers": True,
     "restore_scrollback": True,
     "restore_scrollback_lines": 5000,
+    "show_tree": True,
+    "tree_width": 220,
+    "tree_show_hidden": False,
     "window_size": [1000, 620],
     "restore_session": True,
     "confirm_close": 2,
@@ -222,10 +228,13 @@ class SplitPaned(Gtk.Paned):
 class Pane(Gtk.Box):
     """Un panel: cabecera opcional + terminal VTE + barra de desplazamiento."""
 
-    def __init__(self, app, cwd=None, restore_text=None):
+    def __init__(self, app, cwd=None, restore_text=None, project_root=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.app = app
         self.restore_text = restore_text
+        self.child_pid = None
+        self.cd_from = self.cd_to = None
+        self.project_root = project_root  # carpeta abierta con «Abrir proyecto» (o None)
         self.header = Gtk.Label(xalign=0)
         self.header.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
         self.header.get_style_context().add_class("pane-header")
@@ -244,7 +253,15 @@ class Pane(Gtk.Box):
         scrollbar = Gtk.Scrollbar(orientation=Gtk.Orientation.VERTICAL,
                                   adjustment=self.term.get_vadjustment())
         hbox.pack_start(scrollbar, False, False, 0)
-        self.pack_start(hbox, True, True, 0)
+
+        # Cada panel lleva su propio árbol de proyecto a la izquierda del terminal.
+        self.tree = ProjectTree(app, self)
+        self.tree_visible = None  # None = seguir la opción global
+        self.body = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        self.body.pack1(self.tree, False, False)
+        self.body.pack2(hbox, True, False)
+        self.body.set_position(int(app.cfg.get("tree_width", 220)))
+        self.pack_start(self.body, True, True, 0)
 
         self.term.connect("focus-in-event", lambda *_: app.on_pane_focus(self))
         self.term.connect("button-press-event", lambda t, e: app.on_button(self, e))
@@ -316,6 +333,7 @@ class Pane(Gtk.Box):
                               GLib.SpawnFlags.SEARCH_PATH, None, None, -1, None, self._on_spawned, None)
 
     def _on_spawned(self, term, pid, error, *_):
+        self.child_pid = pid if pid and pid > 0 else None
         # VTE reinicia el buffer al asignar la pty; por eso el contenido anterior se
         # vuelca aquí, ya con la pty asignada y antes de que el shell escriba su prompt.
         if self.restore_text:
@@ -337,34 +355,332 @@ class Pane(Gtk.Box):
     def title(self):
         return self.term.get_window_title() or os.path.basename(self.cwd() or "") or "Shell"
 
+    _TITLE_RE = re.compile(r"^[^:@\s]+@[^:]+:\s*(\S.*?)\s*$")
+
     def cwd(self):
-        """Directorio actual del shell, buscando en /proc el proceso con nuestro pty."""
-        pty = self.term.get_pty()
-        if pty is None:
-            return None
-        try:
-            tty = os.ttyname(pty.get_fd())
-            for pdir in glob.glob("/proc/[0-9]*"):
-                try:
-                    if os.readlink(f"{pdir}/fd/0") == tty:
-                        return os.readlink(f"{pdir}/cwd")
-                except OSError:
-                    continue
-        except OSError:
-            pass
+        """Directorio actual del shell.
+
+        Orden: OSC 7 si el shell lo emite; /proc/<pid>/cwd del hijo (fuera de Flatpak);
+        y como respaldo el título de la ventana («usuario@equipo: ~/ruta», el prompt
+        por defecto de bash en Debian/Ubuntu).
+        """
+        uri = self.term.get_current_directory_uri()
+        if uri:
+            try:
+                return GLib.filename_from_uri(uri)[0]
+            except (GLib.Error, TypeError):
+                pass
+        if not IN_FLATPAK and self.child_pid:
+            try:
+                return os.readlink(f"/proc/{self.child_pid}/cwd")
+            except OSError:
+                pass
+        m = self._TITLE_RE.match(self.term.get_window_title() or "")
+        if m:
+            path = os.path.expanduser(m.group(1))
+            if os.path.isdir(path):
+                return path
         return None
 
-    def change_dir(self, path):
+    def change_dir(self, path, clear=True):
         """Cambia el directorio del shell en marcha (sin matar el proceso)."""
-        self.term.feed_child(f" cd {shlex.quote(path)} && clear\n".encode())
+        self.cd_from, self.cd_to = self.cwd(), path
+        cmd = f" cd {shlex.quote(path)}" + (" && clear" if clear else "")
+        self.term.feed_child((cmd + "\n").encode())
         self.last_cwd = path
         self.header.set_text(path)
 
+    def tree_root(self):
+        """Carpeta que debe mostrar el árbol para este panel."""
+        if self.project_root and os.path.isdir(self.project_root):
+            return self.project_root
+        return self.cwd_or_last()
+
+    def tree_shown(self):
+        return self.app.cfg.get("show_tree", True) if self.tree_visible is None else self.tree_visible
+
+    def set_tree_visible(self, visible):
+        """Muestra u oculta el árbol de este panel (None = volver a la opción global)."""
+        self.tree_visible = visible
+        if self.tree_shown():
+            self.tree.show_all()
+            self.sync_tree()
+        else:
+            self.tree.hide()
+
+    def sync_tree(self):
+        """El árbol muestra el proyecto del panel o, sin proyecto, el directorio actual."""
+        if self.tree.get_visible():
+            self.tree.set_root(self.tree_root())
+
     def cwd_or_last(self):
         cwd = self.cwd()
+        # Justo después de un «cd» pedido por Pytrol, el shell puede no haberlo
+        # ejecutado aún: hasta que cambie, damos por bueno el destino pedido.
+        if getattr(self, "cd_to", None):
+            if cwd is None or cwd == self.cd_from:
+                return self.cd_to
+            self.cd_to = None
         if cwd:
             self.last_cwd = cwd
         return self.last_cwd
+
+
+class ProjectTree(Gtk.Box):
+    """Árbol de carpetas y archivos del proyecto de un panel (cada división tiene el suyo)."""
+
+    COL_NAME, COL_PATH, COL_IS_DIR, COL_ICON, COL_LOADED = range(5)
+
+    def __init__(self, app, pane):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL)
+        self.app = app
+        self.pane = pane
+        self.root = None
+        self.pinned = False
+        self._monitors = {}
+        self._refresh_id = None
+
+        header = Gtk.Box(spacing=2)
+        header.get_style_context().add_class("tree-header")
+        self.label = Gtk.Label(xalign=0)
+        self.label.set_ellipsize(Pango.EllipsizeMode.START)
+        self.label.set_tooltip_text("")
+        header.pack_start(self.label, True, True, 4)
+        self.pin_btn = Gtk.ToggleButton()
+        self.pin_btn.set_image(Gtk.Image.new_from_icon_name("view-pin-symbolic", Gtk.IconSize.MENU))
+        self.pin_btn.set_relief(Gtk.ReliefStyle.NONE)
+        self.pin_btn.set_tooltip_text("Fijar esta carpeta (no seguir al directorio del terminal)")
+        self.pin_btn.connect("toggled", lambda b: self.set_pinned(b.get_active()))
+        self.get_style_context().add_class("project-tree")
+        for icon, tip, cb in (("window-close-symbolic", "Ocultar el árbol de este panel", self.hide_me),
+                              ("go-up-symbolic", "Subir a la carpeta superior", self.go_up)):
+            b = Gtk.Button.new_from_icon_name(icon, Gtk.IconSize.MENU)
+            b.set_relief(Gtk.ReliefStyle.NONE)
+            b.set_tooltip_text(tip)
+            b.connect("clicked", lambda _b, f=cb: f())
+            header.pack_end(b, False, False, 0)
+        header.pack_end(self.pin_btn, False, False, 0)
+        self.pack_start(header, False, False, 0)
+
+        self.store = Gtk.TreeStore(str, str, bool, str, bool)
+        self.view = Gtk.TreeView(model=self.store)
+        self.view.set_headers_visible(False)
+        self.view.set_enable_search(True)
+        self.view.set_search_column(self.COL_NAME)
+        col = Gtk.TreeViewColumn("Archivo")
+        pix = Gtk.CellRendererPixbuf()
+        txt = Gtk.CellRendererText()
+        txt.set_property("ellipsize", Pango.EllipsizeMode.END)
+        col.pack_start(pix, False)
+        col.pack_start(txt, True)
+        col.add_attribute(pix, "icon-name", self.COL_ICON)
+        col.add_attribute(txt, "text", self.COL_NAME)
+        self.view.append_column(col)
+        self.view.connect("row-expanded", self.on_row_expanded)
+        self.view.connect("row-activated", self.on_row_activated)
+        self.view.connect("button-press-event", self.on_button)
+        sw = Gtk.ScrolledWindow()
+        sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        sw.add(self.view)
+        self.pack_start(sw, True, True, 0)
+
+    # ---- raíz
+    def set_root(self, path, force=False):
+        if not path or (self.pinned and not force):
+            return
+        path = os.path.abspath(path)
+        if path == self.root or not os.path.isdir(path):
+            return
+        self.root = path
+        self.label.set_text(os.path.basename(path.rstrip("/")) or path)
+        self.label.set_tooltip_text(path)
+        self.rebuild()
+
+    def hide_me(self):
+        self.pane.set_tree_visible(False)
+
+    def set_pinned(self, value):
+        self.pinned = bool(value)
+        if self.pin_btn.get_active() != self.pinned:
+            self.pin_btn.set_active(self.pinned)
+
+    def go_up(self):
+        if self.root and os.path.dirname(self.root) != self.root:
+            self.set_root(os.path.dirname(self.root), force=True)
+
+    def choose_root(self):
+        path = self.app.choose_folder("Carpeta del árbol")
+        if path:
+            self.set_root(path, force=True)
+
+    # ---- contenido
+    def _icon_for(self, name, is_dir):
+        if is_dir:
+            return "folder"
+        ctype, _ = Gio.content_type_guess(name, None)
+        return Gio.content_type_get_generic_icon_name(ctype) or "text-x-generic"
+
+    def _populate(self, parent_iter, path):
+        show_hidden = self.app.cfg.get("tree_show_hidden", False)
+        try:
+            entries = list(os.scandir(path))
+        except OSError:
+            return
+        def key(e):
+            try:
+                d = e.is_dir(follow_symlinks=True)
+            except OSError:
+                d = False
+            return (not d, e.name.casefold())
+        for e in sorted(entries, key=key):
+            if e.name.startswith(".") and not show_hidden:
+                continue
+            try:
+                is_dir = e.is_dir(follow_symlinks=True)
+            except OSError:
+                is_dir = False
+            it = self.store.append(parent_iter, [e.name, e.path, is_dir, self._icon_for(e.name, is_dir), False])
+            if is_dir:
+                self.store.append(it, ["…", "", False, "", False])  # marcador para poder expandir
+
+    def rebuild(self):
+        expanded = self._expanded_paths()
+        self._clear_monitors()
+        self.store.clear()
+        if not self.root:
+            return
+        self._populate(None, self.root)
+        self._watch(self.root)
+        self._reexpand(None, expanded)
+
+    def _expanded_paths(self):
+        out = set()
+        def walk(it):
+            while it is not None:
+                if self.store[it][self.COL_IS_DIR] and self.view.row_expanded(self.store.get_path(it)):
+                    out.add(self.store[it][self.COL_PATH])
+                    walk(self.store.iter_children(it))
+                it = self.store.iter_next(it)
+        walk(self.store.get_iter_first())
+        return out
+
+    def _reexpand(self, parent, expanded):
+        it = self.store.iter_children(parent)
+        while it is not None:
+            if self.store[it][self.COL_IS_DIR] and self.store[it][self.COL_PATH] in expanded:
+                self.view.expand_row(self.store.get_path(it), False)
+                self._reexpand(it, expanded)
+            it = self.store.iter_next(it)
+
+    def on_row_expanded(self, _view, it, _path):
+        if self.store[it][self.COL_LOADED]:
+            return
+        # Primero se añaden los hijos reales y después se quita el marcador «…»:
+        # si la fila se quedara sin hijos un instante, GTK la contraería.
+        placeholders = []
+        child = self.store.iter_children(it)
+        while child is not None:
+            placeholders.append(child)
+            child = self.store.iter_next(child)
+        path = self.store[it][self.COL_PATH]
+        self._populate(it, path)
+        for ph in placeholders:
+            self.store.remove(ph)
+        self.store[it][self.COL_LOADED] = True
+        self._watch(path)
+
+    def refresh(self):
+        self.rebuild()
+
+    # ---- vigilancia de cambios
+    def _watch(self, path):
+        if path in self._monitors:
+            return
+        try:
+            mon = Gio.File.new_for_path(path).monitor_directory(Gio.FileMonitorFlags.NONE, None)
+            mon.connect("changed", self._on_changed)
+            self._monitors[path] = mon
+        except GLib.Error:
+            pass
+
+    def _clear_monitors(self):
+        for mon in self._monitors.values():
+            mon.cancel()
+        self._monitors.clear()
+
+    def _on_changed(self, *_):
+        if self._refresh_id:
+            GLib.source_remove(self._refresh_id)
+        self._refresh_id = GLib.timeout_add(400, self._deferred_refresh)
+
+    def _deferred_refresh(self):
+        self._refresh_id = None
+        self.rebuild()
+        return False
+
+    # ---- acciones
+    def _row_at(self, treepath):
+        it = self.store.get_iter(treepath)
+        return self.store[it][self.COL_PATH], self.store[it][self.COL_IS_DIR]
+
+    def on_row_activated(self, _view, treepath, _col):
+        path, is_dir = self._row_at(treepath)
+        if not path:
+            return
+        if is_dir:
+            self.app.terminal_cd(path, self.pane)
+        else:
+            self.open_with_default(path)
+
+    def open_with_default(self, path):
+        try:
+            Gio.AppInfo.launch_default_for_uri(Gio.File.new_for_path(path).get_uri(), None)
+        except GLib.Error as exc:
+            print(f"No se pudo abrir {path}: {exc}", file=sys.stderr)
+
+    def on_button(self, view, event):
+        if event.button != 3:
+            return False
+        hit = view.get_path_at_pos(int(event.x), int(event.y))
+        if hit:
+            view.set_cursor(hit[0], None, False)
+            path, is_dir = self._row_at(hit[0])
+        else:
+            path, is_dir = self.root, True
+        self.show_context_menu(path, is_dir, event)
+        return True
+
+    def show_context_menu(self, path, is_dir, event):
+        menu = Gtk.Menu()
+        def add(label, cb, sensitive=True):
+            it = Gtk.MenuItem(label=label)
+            it.set_sensitive(sensitive)
+            it.connect("activate", lambda *_: cb())
+            menu.append(it)
+        folder = path if is_dir else os.path.dirname(path)
+        if is_dir:
+            add("Ir a esta carpeta en el terminal", lambda: self.app.terminal_cd(path, self.pane))
+            add("Hacer raíz del árbol", lambda: self.set_root(path, force=True))
+            add("Abrir como proyecto de este panel", lambda: self.app.open_project_in(self.pane, path))
+        else:
+            add("Abrir con la aplicación predeterminada", lambda: self.open_with_default(path))
+            add("Ir a su carpeta en el terminal", lambda: self.app.terminal_cd(folder, self.pane))
+        add("Insertar ruta en el terminal", lambda: self.app.terminal_insert(path, self.pane))
+        add("Copiar ruta", lambda: Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(path, -1))
+        menu.append(Gtk.SeparatorMenuItem())
+        add("Nuevo panel aquí (vertical)", lambda: self.app.split(self.pane, Gtk.Orientation.HORIZONTAL, cwd=folder))
+        add("Nuevo panel aquí (horizontal)", lambda: self.app.split(self.pane, Gtk.Orientation.VERTICAL, cwd=folder))
+        add("Nueva pestaña aquí", lambda: self.app.new_tab(cwd=folder))
+        menu.append(Gtk.SeparatorMenuItem())
+        hidden = Gtk.CheckMenuItem(label="Mostrar archivos ocultos")
+        hidden.set_active(self.app.cfg.get("tree_show_hidden", False))
+        hidden.connect("toggled", lambda w: self.app.set_tree_hidden(w.get_active()))
+        menu.append(hidden)
+        add("Actualizar", self.refresh)
+        add("Elegir carpeta…", self.choose_root)
+        add("Ocultar el árbol de este panel", self.hide_me)
+        menu.show_all()
+        menu.popup_at_pointer(event)
 
 
 class Tab(Gtk.Box):
@@ -428,6 +744,7 @@ class Pytrol(Gtk.Window):
             self.new_tab()
         self.show_all()
         self.menubar.set_visible(self.cfg["show_menubar"])
+        self.apply_tree_visibility()
 
         # Guardado periódico de la sesión (protege ante cierres bruscos)
         GLib.timeout_add_seconds(SESSION_SAVE_SECONDS, self._periodic_save)
@@ -443,9 +760,51 @@ class Pytrol(Gtk.Window):
             .pane-header { background: #2d2d2d; color: #bbbbbb; font-size: 0.85em;
                            padding: 1px 6px; border-bottom: 1px solid #444; }
             .pane-header.focused { background: #3b5a8a; color: #ffffff; }
+            .tree-header { background: #2d2d2d; color: #dddddd; font-size: 0.85em;
+                           border-bottom: 1px solid #444; }
+            .tree-header button { padding: 0 2px; min-height: 18px; min-width: 18px; }
+            .project-tree treeview { background-color: #232323; color: #d8d8d8; }
+            .project-tree treeview:selected { background-color: #3b5a8a; color: #ffffff; }
+            .project-tree scrolledwindow { border-right: 1px solid #444; }
         """)
         Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), css,
                                                  Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+    # ---------------------------------------------------------- árboles de proyecto
+    def all_panes(self):
+        for i in range(self.notebook.get_n_pages()):
+            yield from self.notebook.get_nth_page(i).panes()
+
+    def apply_tree_visibility(self):
+        for p in self.all_panes():
+            p.set_tree_visible(p.tree_visible)
+
+    def toggle_tree(self):
+        """Muestra u oculta los árboles de todos los paneles (y olvida ajustes por panel)."""
+        self.cfg["show_tree"] = not self.cfg.get("show_tree", True)
+        for p in self.all_panes():
+            p.set_tree_visible(None)
+        save_config(self.cfg)
+
+    def set_tree_hidden(self, value):
+        self.cfg["tree_show_hidden"] = bool(value)
+        save_config(self.cfg)
+        for p in self.all_panes():
+            p.tree.rebuild()
+
+    def terminal_cd(self, path, pane=None):
+        pane = pane or self.current_pane()
+        if pane is None or not path:
+            return
+        pane.change_dir(path, clear=False)
+        pane.term.grab_focus()
+
+    def terminal_insert(self, path, pane=None):
+        pane = pane or self.current_pane()
+        if pane is None or not path:
+            return
+        pane.term.feed_child((shlex.quote(path) + " ").encode())
+        pane.term.grab_focus()
 
     def _remember_size(self, _w, alloc):
         if not (self.get_window() and self.get_window().get_state() & Gdk.WindowState.MAXIMIZED):
@@ -455,6 +814,11 @@ class Pytrol(Gtk.Window):
     def _serialize_widget(self, w):
         if isinstance(w, Pane):
             node = {"type": "pane", "cwd": w.cwd_or_last()}
+            if w.project_root:
+                node["project"] = w.project_root
+            if w.tree_visible is not None:
+                node["tree"] = w.tree_visible
+            node["tree_width"] = w.body.get_position()
             if self.cfg.get("restore_scrollback", True):
                 text = w.scrollback_text(int(self.cfg.get("restore_scrollback_lines", 5000)))
                 if text:
@@ -502,7 +866,11 @@ class Pytrol(Gtk.Window):
             return Pane(self)
         if node.get("type") == "pane":
             text = node.get("screen") if self.cfg.get("restore_scrollback", True) else None
-            return Pane(self, node.get("cwd"), restore_text=text)
+            pane = Pane(self, node.get("cwd"), restore_text=text, project_root=node.get("project"))
+            pane.tree_visible = node.get("tree")
+            if node.get("tree_width"):
+                pane.body.set_position(int(node["tree_width"]))
+            return pane
         orient = Gtk.Orientation.HORIZONTAL if node.get("orientation") == "h" else Gtk.Orientation.VERTICAL
         paned = SplitPaned(orient, float(node.get("fraction", 0.5)))
         paned.pack1(self._build_widget(node.get("a")), True, False)
@@ -639,7 +1007,8 @@ class Pytrol(Gtk.Window):
         mb.append(self._submenu("Proyectos", [
             self._item("open_project"), self._item("open_project_split_v"),
             self._item("open_project_split_h"), self._item("open_project_tab"), None,
-            recent_item]))
+            recent_item, None,
+            self._item("toggle_tree"), self._item("pin_tree"), self._item("tree_show_hidden")]))
 
         mb.append(self._submenu("Edición", [
             self._item("copy"), self._item("paste"), self._item("select_all"), None,
@@ -649,7 +1018,7 @@ class Pytrol(Gtk.Window):
             self._item("prev_tab"), self._item("next_tab"),
             self._item("move_tab_left"), self._item("move_tab_right"), None,
             self._item("zoom_in"), self._item("zoom_out"), self._item("zoom_reset"), None,
-            self._item("toggle_menubar"), self._item("fullscreen")]))
+            self._item("toggle_tree"), self._item("toggle_menubar"), self._item("fullscreen")]))
 
         mb.append(self._submenu("Preferencias", [self._item("preferences")]))
 
@@ -702,6 +1071,8 @@ class Pytrol(Gtk.Window):
         idx = self.notebook.append_page(tab, box)
         self.notebook.set_tab_reorderable(tab, True)
         tab.show_all()
+        for p in panes:
+            p.set_tree_visible(p.tree_visible)
         self.notebook.set_current_page(idx)
         pane.term.grab_focus()
         self.update_tabs_visibility()
@@ -756,6 +1127,7 @@ class Pytrol(Gtk.Window):
         paned.pack1(pane, True, False)
         paned.pack2(new_pane, True, False)
         paned.show_all()
+        new_pane.set_tree_visible(None)
         self.update_headers(tab)
         new_pane.term.grab_focus()
         self.save_session()
@@ -799,6 +1171,8 @@ class Pytrol(Gtk.Window):
         root = self._nest(rows_widgets, Gtk.Orientation.VERTICAL)
         tab.pack_start(root, True, True, 0)
         tab.show_all()
+        for p in panes:
+            p.set_tree_visible(p.tree_visible)
         tab.focused = first
         self.update_headers(tab)
         first.term.grab_focus()
@@ -888,8 +1262,10 @@ class Pytrol(Gtk.Window):
         if pane is None or not path:
             return
         pane.change_dir(path)
+        pane.project_root = path
         self.remember_project(path)
         self.update_headers(self.current_tab())
+        pane.tree.set_root(path, force=True)
         pane.term.grab_focus()
 
     def open_project_dialog(self, mode):
@@ -899,12 +1275,17 @@ class Pytrol(Gtk.Window):
         if mode == "here":
             self.open_project_in(self.current_pane(), path)
         elif mode == "tab":
-            self.new_tab(cwd=path)
+            tab = self.new_tab(cwd=path)
+            new_pane = tab.panes()[0]
+            new_pane.project_root = path
             self.remember_project(path)
+            new_pane.tree.set_root(path, force=True)
         else:
             orient = Gtk.Orientation.HORIZONTAL if mode == "split_v" else Gtk.Orientation.VERTICAL
-            self.split(self.current_pane(), orient, cwd=path)
+            new_pane = self.split(self.current_pane(), orient, cwd=path)
+            new_pane.project_root = path
             self.remember_project(path)
+            new_pane.tree.set_root(path, force=True)
 
     def clear_recent(self, *_):
         self.cfg["recent_projects"] = []
@@ -923,6 +1304,9 @@ class Pytrol(Gtk.Window):
         tab = pane.get_ancestor(Tab)
         if tab is not None:
             self.update_headers(tab)
+            # Sin proyecto explícito, el árbol del panel sigue al directorio del shell
+            if not pane.project_root:
+                pane.sync_tree()
 
     def on_switch_page(self, _nb, tab, _idx):
         GLib.idle_add(self.refresh_tab_label, tab)
@@ -989,6 +1373,9 @@ class Pytrol(Gtk.Window):
         elif a == "zoom_out" and term: self.zoom(term, 1 / 1.1)
         elif a == "zoom_reset" and term: term.set_font_scale(1.0)
         elif a == "toggle_menubar": self.toggle_menubar()
+        elif a == "toggle_tree": self.toggle_tree()
+        elif a == "pin_tree" and pane: pane.tree.set_pinned(not pane.tree.pinned)
+        elif a == "tree_show_hidden": self.set_tree_hidden(not self.cfg.get("tree_show_hidden", False))
         elif a == "fullscreen": self.toggle_fullscreen()
         elif a == "preferences": self.show_preferences()
 
@@ -1030,7 +1417,7 @@ class Pytrol(Gtk.Window):
         menu.popup_at_pointer(event)
 
     def show_about(self, *_):
-        dlg = Gtk.AboutDialog(transient_for=self, program_name=APP_TITLE, version="0.4.0",
+        dlg = Gtk.AboutDialog(transient_for=self, program_name=APP_TITLE, version="0.5.0",
                               comments="Advanced Python Terminal: Power, Speed, Control.\nPaneles, proyectos y pestañas en un solo lugar.",
                               logo_icon_name=APP_ID, license_type=Gtk.License.MIT_X11)
         dlg.run()
@@ -1052,6 +1439,9 @@ class Pytrol(Gtk.Window):
                 p.apply_config(self.cfg)
             self.update_headers(tab)
         self.build_menubar()
+        for p in self.all_panes():
+            p.set_tree_visible(None)
+            p.tree.rebuild()
 
 
 class PreferencesDialog(Gtk.Dialog):
@@ -1099,6 +1489,12 @@ class PreferencesDialog(Gtk.Dialog):
         self.headers = Gtk.CheckButton(label="Mostrar cabecera con el proyecto en cada panel",
                                        active=cfg["show_pane_headers"])
         add("", self.headers)
+        self.show_tree = Gtk.CheckButton(label="Mostrar el árbol del proyecto al iniciar",
+                                         active=cfg.get("show_tree", True))
+        add("", self.show_tree)
+        self.tree_hidden = Gtk.CheckButton(label="Mostrar archivos ocultos en el árbol",
+                                           active=cfg.get("tree_show_hidden", False))
+        add("", self.tree_hidden)
         self.scrollback_restore = Gtk.CheckButton(
             label="Conservar lo escrito en cada terminal al cerrar y mostrarlo al reabrir",
             active=cfg.get("restore_scrollback", True))
@@ -1169,6 +1565,8 @@ class PreferencesDialog(Gtk.Dialog):
         cfg["show_menubar"] = self.menubar.get_active()
         cfg["show_pane_headers"] = self.headers.get_active()
         cfg["restore_scrollback"] = self.scrollback_restore.get_active()
+        cfg["show_tree"] = self.show_tree.get_active()
+        cfg["tree_show_hidden"] = self.tree_hidden.get_active()
         cfg["restore_session"] = self.restore.get_active()
         cfg["confirm_close"] = self.confirm.get_active()
         cfg["shortcuts"] = {row[0]: row[2] for row in self.store}

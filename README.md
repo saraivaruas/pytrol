@@ -11,6 +11,14 @@ que GNOME Terminal). Licencia MIT.
 - **Un proyecto distinto por panel**: menú Proyectos → abre una carpeta en el
   panel actual, en un panel nuevo o en una pestaña nueva. Cada panel muestra una
   cabecera con su carpeta y hay lista de proyectos recientes.
+- **Árbol de archivos en cada panel**: a la izquierda de cada terminal, el árbol
+  de carpetas y archivos de su proyecto (o del directorio actual del shell si no
+  hay proyecto abierto). Se actualiza solo cuando cambian los archivos, carga las
+  carpetas al expandirlas, y con doble clic entra en una carpeta (`cd` en ese
+  terminal) o abre un archivo con la aplicación predeterminada. Menú contextual:
+  insertar ruta, copiar ruta, nuevo panel o pestaña en esa carpeta, archivos
+  ocultos, fijar carpeta. Se oculta por panel (botón ×) o en todos los paneles
+  con Ctrl+Shift+E.
 - Barra de menú completa (Archivo, Paneles, Proyectos, Edición, Ver,
   Preferencias, Ayuda) que se puede ocultar con Ctrl+Shift+M.
 - **Preferencias**: fuente, esquema de colores (qterminal oscuro, Dracula,
@@ -75,6 +83,7 @@ Todos se cambian en Preferencias → Atajos de teclado.
 | Limpiar terminal                     | Ctrl+Shift+L              |
 | Zoom                                 | Ctrl + / Ctrl - / Ctrl 0  |
 | Mostrar u ocultar barra de menú      | Ctrl+Shift+M              |
+| Árboles de proyecto (todos los paneles) | Ctrl+Shift+E           |
 | Pantalla completa                    | F11                       |
 | Preferencias                         | Ctrl+Shift+,              |
 
