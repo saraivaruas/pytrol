@@ -22,6 +22,7 @@ CONFIG_DIR = os.environ.get("PYTROL_CONFIG_DIR") or os.path.join(GLib.get_user_c
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 SESSION_FILE = os.path.join(CONFIG_DIR, "session.json")
 SESSION_SAVE_SECONDS = 5
+ASKPASS_HELPER = os.path.join(CONFIG_DIR, "askpass")
 
 # ---------------------------------------------------------------- esquemas de color
 SCHEMES = {
@@ -104,6 +105,7 @@ DEFAULT_CONFIG = {
     "show_tree": True,
     "tree_width": 220,
     "tree_show_hidden": False,
+    "askpass": True,
     "window_size": [1000, 620],
     "restore_session": True,
     "confirm_close": 2,
@@ -131,6 +133,77 @@ def load_config():
     except (OSError, ValueError):
         pass
     return cfg
+
+
+def ensure_askpass_helper():
+    """Crea el script que sudo/ssh ejecutan cuando no hay terminal para pedir la contraseña.
+
+    Devuelve su ruta, o None si no se pudo crear. En Flatpak el script corre en el
+    anfitrión, así que invoca a Pytrol a través de `flatpak run`.
+    """
+    if IN_FLATPAK:
+        launcher = f"exec flatpak run --command=pytrol {APP_ID} --askpass \"$@\""
+    else:
+        me = os.path.realpath(__file__)
+        if not os.path.exists(me):
+            return None
+        launcher = f"exec {shlex.quote(sys.executable)} {shlex.quote(me)} --askpass \"$@\""
+    script = f"#!/bin/sh\n# Generado por Pytrol: diálogo gráfico de contraseña para sudo/ssh sin terminal.\n{launcher}\n"
+    try:
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        current = open(ASKPASS_HELPER, encoding="utf-8").read() if os.path.exists(ASKPASS_HELPER) else ""
+        if current != script:
+            with open(ASKPASS_HELPER, "w", encoding="utf-8") as fh:
+                fh.write(script)
+        os.chmod(ASKPASS_HELPER, 0o755)
+        return ASKPASS_HELPER
+    except OSError as exc:
+        print(f"No se pudo crear el ayudante askpass: {exc}", file=sys.stderr)
+        return None
+
+
+def run_askpass(prompt):
+    """Modo `pytrol --askpass`: muestra un diálogo de contraseña y la escribe en stdout."""
+    prompt = (prompt or "Contraseña:").strip()
+    dlg = Gtk.Dialog(title="Pytrol: autenticación")
+    dlg.set_keep_above(True)
+    dlg.set_position(Gtk.WindowPosition.CENTER)
+    dlg.set_default_size(420, -1)
+    dlg.add_button("Cancelar", Gtk.ResponseType.CANCEL)
+    ok = dlg.add_button("Aceptar", Gtk.ResponseType.OK)
+    ok.get_style_context().add_class("suggested-action")
+    box = dlg.get_content_area()
+    box.set_spacing(8)
+    box.set_border_width(12)
+    icon = Gtk.Image.new_from_icon_name("dialog-password", Gtk.IconSize.DIALOG)
+    label = Gtk.Label(label=prompt, xalign=0)
+    label.set_line_wrap(True)
+    head = Gtk.Box(spacing=12)
+    head.pack_start(icon, False, False, 0)
+    head.pack_start(label, True, True, 0)
+    box.pack_start(head, False, False, 0)
+    entry = Gtk.Entry()
+    entry.set_visibility(False)
+    entry.set_input_purpose(Gtk.InputPurpose.PASSWORD)
+    entry.set_activates_default(True)
+    box.pack_start(entry, False, False, 0)
+    hint = Gtk.Label(label="Un programa sin terminal (p. ej. sudo desde un script) pide tu contraseña.", xalign=0)
+    hint.get_style_context().add_class("dim-label")
+    hint.set_line_wrap(True)
+    box.pack_start(hint, False, False, 0)
+    dlg.set_default_response(Gtk.ResponseType.OK)
+    dlg.show_all()
+    entry.grab_focus()
+    response = dlg.run()
+    password = entry.get_text()
+    dlg.destroy()
+    while Gtk.events_pending():
+        Gtk.main_iteration_do(False)
+    if response != Gtk.ResponseType.OK:
+        return 1
+    sys.stdout.write(password + "\n")
+    sys.stdout.flush()
+    return 0
 
 
 def save_config(cfg):
@@ -316,6 +389,13 @@ class Pane(Gtk.Box):
         env = dict(os.environ)
         env["TERM"] = "xterm-256color"
         env["COLORTERM"] = "truecolor"
+        helper = ensure_askpass_helper() if self.app.cfg.get("askpass", True) else None
+        if helper:
+            # sudo/ssh usan este programa cuando no disponen de terminal (scripts,
+            # herramientas como Claude Code, aplicaciones gráficas lanzadas desde aquí).
+            env["SUDO_ASKPASS"] = helper
+            env["SSH_ASKPASS"] = helper
+            env.setdefault("SSH_ASKPASS_REQUIRE", "prefer")
         envv = [f"{k}={v}" for k, v in env.items()]
         flags = Vte.PtyFlags.DEFAULT
         if IN_FLATPAK:
@@ -325,8 +405,11 @@ class Pane(Gtk.Box):
             # --watch-bus: el shell termina si se cierra el panel.
             flags = Vte.PtyFlags.NO_CTTY
             argv = ["flatpak-spawn", "--host", "--watch-bus", "--env=TERM=xterm-256color",
-                    "--env=COLORTERM=truecolor", f"--env=SHELL={shell}",
-                    f"--directory={cwd}"] + shlex.split(shell)
+                    "--env=COLORTERM=truecolor", f"--env=SHELL={shell}"]
+            if helper:
+                argv += [f"--env=SUDO_ASKPASS={helper}", f"--env=SSH_ASKPASS={helper}",
+                         "--env=SSH_ASKPASS_REQUIRE=prefer"]
+            argv += [f"--directory={cwd}"] + shlex.split(shell)
         else:
             argv = shlex.split(shell)
         self.term.spawn_async(flags, cwd, argv, envv,
@@ -1417,7 +1500,7 @@ class Pytrol(Gtk.Window):
         menu.popup_at_pointer(event)
 
     def show_about(self, *_):
-        dlg = Gtk.AboutDialog(transient_for=self, program_name=APP_TITLE, version="0.5.0",
+        dlg = Gtk.AboutDialog(transient_for=self, program_name=APP_TITLE, version="0.5.1",
                               comments="Advanced Python Terminal: Power, Speed, Control.\nPaneles, proyectos y pestañas en un solo lugar.",
                               logo_icon_name=APP_ID, license_type=Gtk.License.MIT_X11)
         dlg.run()
@@ -1492,6 +1575,10 @@ class PreferencesDialog(Gtk.Dialog):
         self.show_tree = Gtk.CheckButton(label="Mostrar el árbol del proyecto al iniciar",
                                          active=cfg.get("show_tree", True))
         add("", self.show_tree)
+        self.askpass = Gtk.CheckButton(
+            label="Pedir la contraseña en una ventana cuando sudo o ssh no tienen terminal",
+            active=cfg.get("askpass", True))
+        add("", self.askpass)
         self.tree_hidden = Gtk.CheckButton(label="Mostrar archivos ocultos en el árbol",
                                            active=cfg.get("tree_show_hidden", False))
         add("", self.tree_hidden)
@@ -1567,12 +1654,15 @@ class PreferencesDialog(Gtk.Dialog):
         cfg["restore_scrollback"] = self.scrollback_restore.get_active()
         cfg["show_tree"] = self.show_tree.get_active()
         cfg["tree_show_hidden"] = self.tree_hidden.get_active()
+        cfg["askpass"] = self.askpass.get_active()
         cfg["restore_session"] = self.restore.get_active()
         cfg["confirm_close"] = self.confirm.get_active()
         cfg["shortcuts"] = {row[0]: row[2] for row in self.store}
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--askpass":
+        return run_askpass(" ".join(sys.argv[2:]))
     Pytrol()
     Gtk.main()
 

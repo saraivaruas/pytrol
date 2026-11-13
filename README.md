@@ -30,6 +30,14 @@ que GNOME Terminal). Licencia MIT.
   luz, `kill`, cuelgue), reconstruye todo y muestra el contenido anterior bajo
   un separador. Si limpiaste con `clear`, se restaura vacío. Se puede desactivar
   en Preferencias.
+- **sudo y ssh sin terminal**: cuando `sudo` o `ssh` los ejecuta un programa que
+  no tiene terminal (un script, un asistente como Claude Code, una aplicación
+  gráfica lanzada desde el panel), en vez de fallar con "a terminal is required
+  to read the password" aparece una ventana de Pytrol que pide la contraseña.
+  Lo hace fijando `SUDO_ASKPASS` y `SSH_ASKPASS` en cada panel hacia
+  `~/.config/pytrol/askpass`, que abre `pytrol --askpass`. Si escribes `sudo` tú
+  mismo en el terminal, sigue preguntando ahí como siempre. Se puede desactivar
+  en Preferencias.
 - **Cierre seguro**: al cerrar pregunta dos veces (configurable: ninguna, una o
   dos) para que no se pierda el trabajo por un atajo pulsado sin querer. Si el
   shell termina por sí solo con `exit`, no pregunta.

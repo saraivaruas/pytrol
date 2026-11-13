@@ -20,6 +20,7 @@
       <li>Fuente, esquema de colores, cursor e historial configurables</li>
       <li>Sesión persistente: restaura pestañas, paneles, carpetas y el contenido de cada terminal tras cerrar o ante un cierre inesperado</li>
       <li>Cierre seguro con doble confirmación configurable</li>
+      <li>Ventana de contraseña para sudo y ssh cuando los ejecuta un programa sin terminal</li>
       <li>Zoom con Ctrl + / Ctrl -, pantalla completa con F11</li>
       <li>Menú contextual con copiar, pegar y limpiar</li>
       <li>Colores de 24 bits y enlaces clicables</li>
@@ -36,6 +37,9 @@
   </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.5.1" date="2026-11-13">
+      <description><p>sudo y ssh funcionan también desde programas sin terminal (scripts, asistentes como Claude Code, aplicaciones lanzadas desde el terminal): Pytrol muestra una ventana para la contraseña en lugar del error "a terminal is required".</p></description>
+    </release>
     <release version="0.5.0" date="2026-11-13">
       <description><p>Cada panel lleva su propio árbol de carpetas y archivos del proyecto: se actualiza solo, sigue al directorio del terminal o queda fijado, doble clic entra en la carpeta o abre el archivo, y se oculta por panel o para todos con Ctrl+Shift+E.</p></description>
     </release>
