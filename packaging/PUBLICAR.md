@@ -20,14 +20,15 @@ Dos paquetes, en este orden. Los construye `./scripts/construir-snap.sh` o la CI
 **a) Beta (devmode), sin esperar a nadie**
 1. Cuenta en https://snapcraft.io y `snapcraft login`.
 2. `snapcraft register pytrol` (si el nombre está tomado, cambia `name:` en `snap/snapcraft.yaml`).
-3. `snapcraft upload --release=beta pytrol_X.Y.Z-beta_amd64.snap`. Un snap devmode solo puede ir a `beta` y `edge`.
+3. `snapcraft upload --release=beta pytrol_X.Y.Z-beta_amd64.snap`. Un snap devmode solo puede ir a `beta` y `edge`. **Hecho el 17-11-2026: revisión 1 (0.6.4-beta) en `beta`.**
 4. Límites: el shell de los paneles corre sobre el sistema de archivos de core22, sin tu `git` ni tus herramientas; sirve para probar la ventana, los paneles y el editor.
 
 **Ficha con imágenes:** `snapcraft upload-metadata <archivo.snap>` envía resumen, descripción e icono. El banner y las capturas se suben a mano en https://snapcraft.io/pytrol/listing; los archivos y el orden están en [packaging/store/README.md](store/README.md).
 
 **b) Classic (el definitivo)**
-1. Pide el confinamiento *classic* en https://forum.snapcraft.io (categoría *store-requests*). Explica que Pytrol es un emulador de terminal y que el shell de cada panel debe correr en el sistema del usuario, con acceso a sus proyectos y herramientas. Un revisor humano lo aprueba.
-2. Con la aprobación: `snapcraft upload --release=candidate pytrol_X.Y.Z_amd64.snap`, y cuando lo pruebes, `--release=stable`.
+1. La revisión classic ya está subida (`snapcraft upload pytrol_X.Y.Z_amd64.snap`, sin `--release`); la Store la deja «pendiente de revisión manual».
+2. Crea un tema en https://forum.snapcraft.io/c/store-requests/classic-confinement/26 (categoría `classic-confinement`) con el texto de [packaging/store/solicitud-classic.md](store/solicitud-classic.md). Un revisor humano lo aprueba.
+3. Con la aprobación: `snapcraft release pytrol <revisión> candidate`, y cuando lo pruebes, `stable`.
 
 ## 3. Lista antes de cada versión
 
