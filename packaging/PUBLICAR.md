@@ -27,7 +27,7 @@ Dos paquetes, en este orden. Los construye `./scripts/construir-snap.sh` o la CI
 
 **b) Classic (el definitivo)**
 1. La revisión classic ya está subida (`snapcraft upload pytrol_X.Y.Z_amd64.snap`, sin `--release`); la Store la deja «pendiente de revisión manual».
-2. Crea un tema en https://forum.snapcraft.io/c/store-requests/classic-confinement/26 (categoría `classic-confinement`) con el texto de [packaging/store/solicitud-classic.md](store/solicitud-classic.md). Un revisor humano lo aprueba.
+2. **Hecho el 17-11-2026:** tema https://forum.snapcraft.io/t/classic-confinement-request-for-pytrol/54260. (Si hubiera que repetirlo, crea un tema en https://forum.snapcraft.io/c/store-requests/classic-confinement/26 (categoría `classic-confinement`) con el texto de [packaging/store/solicitud-classic.md](store/solicitud-classic.md). Un revisor humano lo aprueba.)
 3. Con la aprobación: `snapcraft release pytrol <revisión> candidate`, y cuando lo pruebes, `stable`.
 
 ## 3. Lista antes de cada versión
