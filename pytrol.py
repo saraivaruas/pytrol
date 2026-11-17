@@ -60,6 +60,8 @@ ACTIONS = [
     ("move_tab_left", "Mover pestaña a la izquierda", "<Primary><Shift>Left"),
     ("move_tab_right", "Mover pestaña a la derecha", "<Primary><Shift>Right"),
     ("quit", "Salir", "<Primary><Shift>q"),
+    ("quit_forget", "Salir sin guardar la sesión", ""),
+    ("forget_pane", "No recordar / recordar este panel en la sesión", ""),
     ("split_h", "Dividir horizontalmente (arriba/abajo)", "<Primary><Shift>d"),
     ("split_v", "Dividir verticalmente (izquierda/derecha)", "<Primary><Shift>r"),
     ("close_pane", "Cerrar panel", "<Primary><Shift>x"),
@@ -327,6 +329,7 @@ class Pane(Gtk.Box):
         self.restore_text = restore_text
         self.child_pid = None
         self.cd_from = self.cd_to = None
+        self.remember = True  # False: al reabrir Pytrol este panel vuelve vacío y limpio
         self.project_root = project_root  # carpeta abierta con «Abrir proyecto» (o None)
         self.header = Gtk.Label(xalign=0)
         self.header.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
@@ -1043,6 +1046,7 @@ class Pytrol(Gtk.Window):
         self.connect("size-allocate", self._remember_size)
 
         self._quitting = False
+        self._discard_session = False
         self._session_dirty = False
         restored = self.cfg.get("restore_session", True) and self.restore_session()
         if not restored:
@@ -1120,6 +1124,8 @@ class Pytrol(Gtk.Window):
     # ---------------------------------------------------------- sesión
     def _serialize_widget(self, w):
         if isinstance(w, Pane):
+            if not w.remember:
+                return {"type": "pane", "fresh": True}
             node = {"type": "pane", "cwd": w.cwd_or_last()}
             if w.project_root:
                 node["project"] = w.project_root
@@ -1159,7 +1165,7 @@ class Pytrol(Gtk.Window):
                 "window_size": self.cfg.get("window_size")}
 
     def save_session(self, *_):
-        if self.notebook.get_n_pages() == 0:
+        if self.notebook.get_n_pages() == 0 or self._discard_session:
             return
         write_session(self.session_state())
         self._session_dirty = False
@@ -1174,6 +1180,8 @@ class Pytrol(Gtk.Window):
 
     def _build_widget(self, node):
         if not node:
+            return Pane(self)
+        if node.get("type") == "pane" and node.get("fresh"):
             return Pane(self)
         if node.get("type") == "pane":
             text = node.get("screen") if self.cfg.get("restore_scrollback", True) else None
@@ -1302,7 +1310,7 @@ class Pytrol(Gtk.Window):
         mb.append(self._submenu("Archivo", [
             self._item("new_tab"), self._item("open_project_tab"), None,
             self._item("open_file"), self._item("save_file"), self._item("close_file"), None,
-            self._item("close_tab"), None, self._item("quit")]))
+            self._item("close_tab"), None, self._item("quit"), self._item("quit_forget")]))
 
         layouts = Gtk.Menu()
         for idx, (label, _r, _c, _m) in enumerate(LAYOUTS):
@@ -1332,7 +1340,7 @@ class Pytrol(Gtk.Window):
         recent_item.set_submenu(recent)
 
         mb.append(self._submenu("Paneles", [
-            self._item("split_v"), self._item("split_h"), layout_item, self._item("close_pane"), None,
+            self._item("split_v"), self._item("split_h"), layout_item, self._item("close_pane"), self._item("forget_pane"), None,
             self._item("focus_left"), self._item("focus_right"),
             self._item("focus_up"), self._item("focus_down")]))
 
@@ -1610,7 +1618,7 @@ class Pytrol(Gtk.Window):
         panes = tab.panes()
         show = self.cfg["show_pane_headers"] and len(panes) > 1
         for p in panes:
-            p.header.set_text(p.cwd() or p.title())
+            p.header.set_text((p.cwd() or p.title()) + ("" if p.remember else "   ·   no se recuerda al reabrir"))
             p.header.set_visible(show)
             ctx = p.header.get_style_context()
             if p is tab.focused:
@@ -1801,6 +1809,8 @@ class Pytrol(Gtk.Window):
         elif a == "move_tab_left": self.move_tab(-1)
         elif a == "move_tab_right": self.move_tab(1)
         elif a == "quit": self.quit()
+        elif a == "quit_forget": self.quit_forget()
+        elif a == "forget_pane" and pane: self.toggle_forget_pane(pane)
         elif a == "split_h" and pane: self.split(pane, Gtk.Orientation.VERTICAL)
         elif a == "split_v" and pane: self.split(pane, Gtk.Orientation.HORIZONTAL)
         elif a == "close_pane" and pane: self.close_pane(pane)
@@ -1845,6 +1855,31 @@ class Pytrol(Gtk.Window):
         else:
             self.fullscreen()
 
+    def toggle_forget_pane(self, pane):
+        pane.remember = not pane.remember
+        tab = pane.get_ancestor(Tab)
+        if tab is not None:
+            self.update_headers(tab)
+            # Con un solo panel la cabecera está oculta: avisarlo en el título de la pestaña
+        self.save_session()
+
+    def quit_forget(self, force=False):
+        """Cierra Pytrol sin guardar la sesión: la próxima vez arranca con un solo terminal limpio."""
+        if self._quitting:
+            return
+        if not force and not self._ask(
+                "¿Salir sin guardar la sesión?",
+                "Se borrará la sesión guardada: al abrir Pytrol de nuevo empezará con un terminal limpio, "
+                "sin paneles, proyectos, archivos ni contenido anteriores.", "Salir sin guardar"):
+            return
+        self._discard_session = True
+        try:
+            os.remove(SESSION_FILE)
+        except OSError:
+            pass
+        self._quitting = True
+        self.destroy()
+
     def quit(self, force=False):
         if self._quitting:
             return
@@ -1857,11 +1892,15 @@ class Pytrol(Gtk.Window):
     def show_context_menu(self, pane, event):
         menu = Gtk.Menu()
         for action_id in ("copy", "paste", None, "split_v", "split_h", "close_pane", None,
-                          "open_project", "new_tab", "close_tab", None, "clear", "preferences"):
+                          "forget_pane", "open_project", "new_tab", "close_tab", None, "clear", "preferences"):
             if action_id is None:
                 menu.append(Gtk.SeparatorMenuItem())
                 continue
-            it = self._item(action_id)
+            if action_id == "forget_pane":
+                it = self._item(action_id, "Recordar este panel en la sesión" if not pane.remember
+                                else "No recordar este panel al reabrir")
+            else:
+                it = self._item(action_id)
             if action_id == "copy":
                 it.set_sensitive(pane.term.get_has_selection())
             menu.append(it)
@@ -1869,7 +1908,7 @@ class Pytrol(Gtk.Window):
         menu.popup_at_pointer(event)
 
     def show_about(self, *_):
-        dlg = Gtk.AboutDialog(transient_for=self, program_name=APP_TITLE, version="0.6.3",
+        dlg = Gtk.AboutDialog(transient_for=self, program_name=APP_TITLE, version="0.6.4",
                               comments="Advanced Python Terminal: Power, Speed, Control.\nPaneles, proyectos y pestañas en un solo lugar.",
                               logo_icon_name=APP_ID, license_type=Gtk.License.MIT_X11)
         dlg.run()

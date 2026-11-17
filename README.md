@@ -5,6 +5,7 @@
 Terminal avanzado para Linux escrito en Python con GTK 3 y VTE (el mismo motor
 que GNOME Terminal). Licencia MIT.
 
+- **Sesión a tu medida**: por defecto Pytrol recuerda paneles, proyectos, archivos y contenido. Un panel puede marcarse como «no recordar» (clic derecho o menú Paneles) para que vuelva limpio, y Archivo → «Salir sin guardar la sesión» empieza de cero la próxima vez.
 - Pestañas reordenables que heredan el directorio actual.
 - **Paneles divisibles** en 2, 4, 6 u 8, vertical u horizontalmente (menú
   Paneles → Diseño de paneles), o dividiendo el panel activo a mano. En las
@@ -100,6 +101,7 @@ Todos se cambian en Preferencias → Atajos de teclado.
 | Abrir proyecto en nueva pestaña      | Ctrl+Shift+P              |
 | Abrir archivo en el editor           | Ctrl+Shift+F              |
 | Editor: guardar / cerrar / al terminal | Ctrl+S / Ctrl+W / Esc   |
+| No recordar un panel / salir sin guardar sesión | Menú Paneles · clic derecho / Archivo |
 | Copiar / Pegar / Seleccionar todo    | Ctrl+Shift+C / V / A      |
 | Pegar en el terminal (alternativa)   | Shift+Insert, clic central (selección) |
 | Pegar en el editor                   | Ctrl+V, Ctrl+Shift+V o Shift+Insert |
