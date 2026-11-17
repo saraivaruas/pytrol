@@ -28,7 +28,7 @@ jobs:
       matrix:
         include:
           - {arch: amd64, runner: ubuntu-24.04}
-          - {arch: arm64, runner: ubuntu-24.04-arm}
+          # arm64 pendiente: GLib aborta al arrancar en el runner arm (getauxval) y aún no está resuelto.
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
@@ -54,7 +54,7 @@ jobs:
       matrix:
         include:
           - {arch: amd64, runner: ubuntu-24.04}
-          - {arch: arm64, runner: ubuntu-24.04-arm}
+          # arm64 pendiente: GLib aborta al arrancar en el runner arm (getauxval) y aún no está resuelto.
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7

@@ -49,6 +49,7 @@ parts:
     build-attributes: [enable-patchelf]
     build-packages:
       - libglib2.0-bin
+      - shared-mime-info
     stage-packages:
       - python3-gi
       - gir1.2-gtk-3.0
@@ -70,6 +71,9 @@ parts:
       craftctl default
       # Los esquemas de GSettings de los paquetes vienen sin compilar.
       glib-compile-schemas "$CRAFT_PART_INSTALL/usr/share/glib-2.0/schemas"
+      # Idem la base de datos MIME: sin ella GTK no reconoce ni sus propios iconos PNG cuando el
+      # snap no corre sobre un sistema que ya la tenga (devmode).
+      update-mime-database "$CRAFT_PART_INSTALL/usr/share/mime"
       # GIO busca módulos aquí; vacío para no cargar los del sistema.
       mkdir -p "$CRAFT_PART_INSTALL"/usr/lib/*-linux-gnu/gio/modules
       # Documentación y ayudas que no hacen falta en ejecución.

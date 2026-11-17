@@ -23,6 +23,8 @@ Dos paquetes, en este orden. Los construye `./scripts/construir-snap.sh` o la CI
 3. `snapcraft upload --release=beta pytrol_X.Y.Z-beta_amd64.snap`. Un snap devmode solo puede ir a `beta` y `edge`.
 4. Límites: el shell de los paneles corre sobre el sistema de archivos de core22, sin tu `git` ni tus herramientas; sirve para probar la ventana, los paneles y el editor.
 
+**Ficha con imágenes:** `snapcraft upload-metadata <archivo.snap>` envía resumen, descripción e icono. El banner y las capturas se suben a mano en https://snapcraft.io/pytrol/listing; los archivos y el orden están en [packaging/store/README.md](store/README.md).
+
 **b) Classic (el definitivo)**
 1. Pide el confinamiento *classic* en https://forum.snapcraft.io (categoría *store-requests*). Explica que Pytrol es un emulador de terminal y que el shell de cada panel debe correr en el sistema del usuario, con acceso a sus proyectos y herramientas. Un revisor humano lo aprueba.
 2. Con la aprobación: `snapcraft upload --release=candidate pytrol_X.Y.Z_amd64.snap`, y cuando lo pruebes, `--release=stable`.

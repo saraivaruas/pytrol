@@ -56,6 +56,20 @@ if [ ! -d "$CACHE" ]; then
   Q="$LIB/libgtk-3-0/gtk-query-immodules-3.0"
   [ -x "$Q" ] && GTK_PATH="$LIB/gtk-3.0" \
     ejecutar "$Q" > "$CACHE.tmp/immodules.cache" 2>/dev/null || true
+  # Configuración de fuentes propia, para cuando el sistema no tiene /etc/fonts (devmode).
+  cat > "$CACHE.tmp/fonts.conf" <<FUENTES
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<fontconfig>
+  <dir>$SNAP/usr/share/fonts</dir>
+  <dir>/usr/share/fonts</dir>
+  <dir>/usr/local/share/fonts</dir>
+  <dir>~/.fonts</dir>
+  <dir prefix="xdg">fonts</dir>
+  <include ignore_missing="yes">$SNAP/etc/fonts/conf.d</include>
+  <cachedir>$CACHE/fontconfig</cachedir>
+</fontconfig>
+FUENTES
   rm -rf "$CACHE" && mv "$CACHE.tmp" "$CACHE" || true
 fi
 
@@ -71,6 +85,8 @@ fijar GTK_DATA_PREFIX "$SNAP/usr"
 fijar GDK_PIXBUF_MODULEDIR "$LIB/gdk-pixbuf-2.0/2.10.0/loaders"
 [ -s "$CACHE/loaders.cache" ] && fijar GDK_PIXBUF_MODULE_FILE "$CACHE/loaders.cache"
 [ -s "$CACHE/immodules.cache" ] && fijar GTK_IM_MODULE_FILE "$CACHE/immodules.cache"
+# Solo si el sistema no tiene su propia configuración de fuentes (en classic se usa la del usuario).
+[ -e /etc/fonts/fonts.conf ] || { [ -s "$CACHE/fonts.conf" ] && fijar FONTCONFIG_FILE "$CACHE/fonts.conf"; } || true
 export PYTROL_SNAP_SAVED="${saved# }"
 
 exec "$LOADER" --library-path "$LIBPATH" "$BASE/usr/bin/python3.10" "$SNAP/lib/pytrol/pytrol.py" "$@"
