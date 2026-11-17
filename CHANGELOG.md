@@ -11,6 +11,9 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - CI en GitHub Actions: pruebas, metadatos de AppStream y construcción y prueba del snap (classic y beta, amd64 y arm64).
 - Guía de publicación (`packaging/PUBLICAR.md`) y script de configuración del repositorio (`tools/configurar-github.sh`).
 
+### Seguridad
+- **La sesión y la configuración ya no son legibles por otras personas del equipo.** La carpeta `~/.config/pytrol` queda en 700 y `session.json` y `config.json` en 600; antes tenían los permisos normales (775 y 664) y la sesión contiene lo que se veía en cada terminal, claves incluidas. Se corrigen al abrir Pytrol también las instalaciones anteriores. Se escribe de forma atómica y 4 pruebas nuevas lo comprueban.
+
 ### Cambiado
 - Dentro del snap, el shell de cada panel y las aplicaciones abiertas desde el árbol de archivos reciben el entorno original del usuario, sin las variables de las bibliotecas del snap; el ayudante de contraseña de `sudo` y `ssh` llama al comando del snap.
 

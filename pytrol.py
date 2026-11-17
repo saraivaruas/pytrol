@@ -211,6 +211,35 @@ def launch_context():
     return ctx
 
 
+def ensure_config_dir():
+    """Crea la carpeta de configuración solo para el usuario y cierra lo que quedó abierto.
+
+    La sesión guarda lo que se ve en cada terminal (claves incluidas), así que ni la carpeta
+    ni sus archivos deben poder leerlos otras personas del equipo. Corrige también las
+    instalaciones anteriores, que los dejaron con los permisos normales (775 y 664).
+    """
+    os.makedirs(CONFIG_DIR, mode=0o700, exist_ok=True)
+    try:
+        if os.stat(CONFIG_DIR).st_uid == os.getuid():
+            os.chmod(CONFIG_DIR, 0o700)
+            for path in (CONFIG_FILE, SESSION_FILE, SESSION_FILE + ".tmp", CONFIG_FILE + ".tmp"):
+                if os.path.isfile(path):
+                    os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def write_private(path, text):
+    """Escribe un archivo que solo puede leer el usuario, de forma atómica (archivo temporal y renombrado)."""
+    ensure_config_dir()
+    tmp = path + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    os.chmod(tmp, 0o600)          # por si el temporal ya existía con otros permisos
+    os.replace(tmp, path)
+
+
 def ensure_askpass_helper():
     """Crea el script que sudo/ssh ejecutan cuando no hay terminal para pedir la contraseña.
 
@@ -228,7 +257,7 @@ def ensure_askpass_helper():
         launcher = f"exec {shlex.quote(sys.executable)} {shlex.quote(me)} --askpass \"$@\""
     script = f"#!/bin/sh\n# Generado por Pytrol: diálogo gráfico de contraseña para sudo/ssh sin terminal.\n{launcher}\n"
     try:
-        os.makedirs(CONFIG_DIR, exist_ok=True)
+        ensure_config_dir()
         current = open(ASKPASS_HELPER, encoding="utf-8").read() if os.path.exists(ASKPASS_HELPER) else ""
         if current != script:
             with open(ASKPASS_HELPER, "w", encoding="utf-8") as fh:
@@ -286,9 +315,7 @@ def run_askpass(prompt):
 
 def save_config(cfg):
     try:
-        os.makedirs(CONFIG_DIR, exist_ok=True)
-        with open(CONFIG_FILE, "w", encoding="utf-8") as fh:
-            json.dump(cfg, fh, indent=2, ensure_ascii=False)
+        write_private(CONFIG_FILE, json.dumps(cfg, indent=2, ensure_ascii=False))
     except OSError as exc:
         print(f"No se pudo guardar la configuración: {exc}", file=sys.stderr)
 
@@ -327,11 +354,7 @@ def load_session():
 
 def write_session(data):
     try:
-        os.makedirs(CONFIG_DIR, exist_ok=True)
-        tmp = SESSION_FILE + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, indent=1, ensure_ascii=False)
-        os.replace(tmp, SESSION_FILE)
+        write_private(SESSION_FILE, json.dumps(data, indent=1, ensure_ascii=False))
     except OSError as exc:
         print(f"No se pudo guardar la sesión: {exc}", file=sys.stderr)
 
@@ -2129,6 +2152,7 @@ class PreferencesDialog(Gtk.Dialog):
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--askpass":
         return run_askpass(" ".join(sys.argv[2:]))
+    ensure_config_dir()
     Pytrol()
     Gtk.main()
 
