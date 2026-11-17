@@ -38,6 +38,9 @@
   </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.6.2" date="2026-11-16">
+      <description><p>Los diseños de paneles horizontales (varias filas) ahora tienen divisores independientes en cada columna: mover el divisor de una columna ya no mueve el de las demás.</p></description>
+    </release>
     <release version="0.6.1" date="2026-11-13">
       <description><p>Pegar desde el portapapeles funciona en todos lados: Ctrl+Shift+V, el menú Editar y el menú contextual actúan sobre el editor o el terminal que tenga el foco, y Shift+Insert también pega en el terminal.</p></description>
     </release>

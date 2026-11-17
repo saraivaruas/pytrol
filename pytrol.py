@@ -1496,10 +1496,20 @@ class Pytrol(Gtk.Window):
         cwd = first.cwd()
         tab.remove(first)
         panes = [first] + [Pane(self, cwd) for _ in range(rows * cols - 1)]
-        rows_widgets = []
-        for r in range(rows):
-            rows_widgets.append(self._nest(panes[r * cols:(r + 1) * cols], Gtk.Orientation.HORIZONTAL))
-        root = self._nest(rows_widgets, Gtk.Orientation.VERTICAL)
+        if rows > cols:
+            # Diseños horizontales (varias filas): primero columnas y dentro de cada una se
+            # apilan sus paneles, así los divisores horizontales de cada columna son independientes.
+            cols_widgets = []
+            for c in range(cols):
+                cols_widgets.append(self._nest([panes[r * cols + c] for r in range(rows)],
+                                               Gtk.Orientation.VERTICAL))
+            root = self._nest(cols_widgets, Gtk.Orientation.HORIZONTAL)
+        else:
+            # Diseños verticales: primero filas; los divisores verticales de cada fila son independientes.
+            rows_widgets = []
+            for r in range(rows):
+                rows_widgets.append(self._nest(panes[r * cols:(r + 1) * cols], Gtk.Orientation.HORIZONTAL))
+            root = self._nest(rows_widgets, Gtk.Orientation.VERTICAL)
         tab.pack_start(root, True, True, 0)
         tab.show_all()
         for p in panes:
@@ -1807,7 +1817,7 @@ class Pytrol(Gtk.Window):
         menu.popup_at_pointer(event)
 
     def show_about(self, *_):
-        dlg = Gtk.AboutDialog(transient_for=self, program_name=APP_TITLE, version="0.6.1",
+        dlg = Gtk.AboutDialog(transient_for=self, program_name=APP_TITLE, version="0.6.2",
                               comments="Advanced Python Terminal: Power, Speed, Control.\nPaneles, proyectos y pestañas en un solo lugar.",
                               logo_icon_name=APP_ID, license_type=Gtk.License.MIT_X11)
         dlg.run()
