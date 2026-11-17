@@ -5,6 +5,9 @@ enlaces salen del propio snap (`snap/snapcraft.yaml`) y se envían con `snapcraf
 las imágenes se suben a mano en la web, en la pestaña **Listing** del panel del snap
 (https://snapcraft.io/pytrol/listing), porque la Store no tiene una orden de consola para ellas.
 
+> **Estado (17-11-2026):** ficha completa y publicada: icono, banner, las cuatro capturas en este orden, categorías
+> Development y Utilities, enlaces de contacto y licencia MIT. Lo de abajo sirve para repetirlo o actualizarlo.
+
 ## Imágenes
 
 | Qué | Archivo | Tamaño | Límites de la Store |

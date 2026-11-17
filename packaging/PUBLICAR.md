@@ -23,7 +23,7 @@ Dos paquetes, en este orden. Los construye `./scripts/construir-snap.sh` o la CI
 3. `snapcraft upload --release=beta pytrol_X.Y.Z-beta_amd64.snap`. Un snap devmode solo puede ir a `beta` y `edge`. **Hecho el 17-11-2026: revisión 1 (0.6.4-beta) en `beta`.**
 4. Límites: el shell de los paneles corre sobre el sistema de archivos de core22, sin tu `git` ni tus herramientas; sirve para probar la ventana, los paneles y el editor.
 
-**Ficha con imágenes:** `snapcraft upload-metadata <archivo.snap>` envía resumen, descripción e icono. El banner y las capturas se suben a mano en https://snapcraft.io/pytrol/listing; los archivos y el orden están en [packaging/store/README.md](store/README.md).
+**Ficha con imágenes (hecho el 17-11-2026):** `snapcraft upload-metadata <archivo.snap>` envía resumen, descripción e icono. El banner y las capturas se suben a mano en https://snapcraft.io/pytrol/listing; los archivos y el orden están en [packaging/store/README.md](store/README.md).
 
 **b) Classic (el definitivo)**
 1. La revisión classic ya está subida (`snapcraft upload pytrol_X.Y.Z_amd64.snap`, sin `--release`); la Store la deja «pendiente de revisión manual».
