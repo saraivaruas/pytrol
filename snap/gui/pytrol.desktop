@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Pytrol
+Comment=Advanced Python Terminal: Power, Speed, Control
+Exec=pytrol
+Icon=${SNAP}/meta/gui/icon.svg
+Terminal=false
+Type=Application
+Categories=System;TerminalEmulator;
+Keywords=terminal;shell;consola;
+StartupNotify=true
+StartupWMClass=io.github.saraivaruas.Pytrol

@@ -1,0 +1,72 @@
+#!/bin/bash
+# Lanzador del snap de Pytrol (confinamiento classic).
+#
+# Un snap classic corre con el sistema real, así que el shell de cada panel es el del
+# usuario. Python y la biblioteca C vienen de la base core22 (que snapd instala junto al
+# snap); GTK, VTE y PyGObject vienen en el propio snap. Python se ejecuta con el cargador
+# de core22 y una ruta de bibliotecas explícita, de modo que no depende de la distribución
+# del usuario ni deja LD_LIBRARY_PATH puesto para los programas que se abren desde un panel.
+#
+# El resto de variables de entorno que hacen falta se cambian aquí, guardando antes el
+# valor original de cada una en PYTROL_SNAP_*. Pytrol las restaura en el shell y en las
+# aplicaciones que abre, para que python3, git, etc. del sistema no vean las del snap.
+set -e
+
+BASE=/snap/core22/current
+if [ ! -x "$BASE/usr/bin/python3.10" ]; then
+  echo "Falta la base core22 (snap install core22)." >&2
+  exit 1
+fi
+
+case "$(uname -m)" in
+  x86_64)  TRIPLET=x86_64-linux-gnu;  LOADER="$BASE/lib64/ld-linux-x86-64.so.2" ;;
+  aarch64) TRIPLET=aarch64-linux-gnu; LOADER="$BASE/lib/ld-linux-aarch64.so.1" ;;
+  armv7l)  TRIPLET=arm-linux-gnueabihf; LOADER="$BASE/lib/ld-linux-armhf.so.3" ;;
+  *) echo "Arquitectura no compatible: $(uname -m)" >&2; exit 1 ;;
+esac
+LIB="$SNAP/usr/lib/$TRIPLET"
+# Bibliotecas del snap primero y después las de la base core22.
+LIBPATH="$LIB:$SNAP/usr/lib:$SNAP/lib/$TRIPLET:$SNAP/lib:$BASE/lib/$TRIPLET:$BASE/usr/lib/$TRIPLET"
+ejecutar() { "$LOADER" --library-path "$LIBPATH" "$@"; }
+
+saved=""
+# fijar VARIABLE VALOR: guarda el original (o que no existía) y asigna el nuevo valor.
+fijar() {
+  local var="$1" valor="$2"
+  saved="$saved $var"
+  if [ -n "${!var+x}" ]; then
+    export "PYTROL_SNAP_HAD_$var=1" "PYTROL_SNAP_ORIG_$var=${!var}"
+  else
+    export "PYTROL_SNAP_HAD_$var=0"
+  fi
+  export "$var=$valor"
+}
+
+# Cachés que dependen de la ruta de instalación: se generan una vez por revisión del snap.
+CACHE="${SNAP_USER_COMMON:-${XDG_CACHE_HOME:-$HOME/.cache}/pytrol-snap}/cache-${SNAP_REVISION:-dev}"
+if [ ! -d "$CACHE" ]; then
+  mkdir -p "$CACHE.tmp"
+  Q="$LIB/gdk-pixbuf-2.0/gdk-pixbuf-query-loaders"
+  [ -x "$Q" ] && GDK_PIXBUF_MODULEDIR="$LIB/gdk-pixbuf-2.0/2.10.0/loaders" \
+    ejecutar "$Q" > "$CACHE.tmp/loaders.cache" 2>/dev/null || true
+  Q="$LIB/libgtk-3-0/gtk-query-immodules-3.0"
+  [ -x "$Q" ] && GTK_PATH="$LIB/gtk-3.0" \
+    ejecutar "$Q" > "$CACHE.tmp/immodules.cache" 2>/dev/null || true
+  rm -rf "$CACHE" && mv "$CACHE.tmp" "$CACHE" || true
+fi
+
+fijar PYTHONPATH "$SNAP/usr/lib/python3/dist-packages${PYTHONPATH:+:$PYTHONPATH}"
+fijar PYTHONDONTWRITEBYTECODE 1
+fijar GI_TYPELIB_PATH "$LIB/girepository-1.0${GI_TYPELIB_PATH:+:$GI_TYPELIB_PATH}"
+fijar XDG_DATA_DIRS "$SNAP/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+fijar GSETTINGS_SCHEMA_DIR "$SNAP/usr/share/glib-2.0/schemas"
+fijar GIO_MODULE_DIR "$LIB/gio/modules"
+fijar GTK_PATH "$LIB/gtk-3.0"
+fijar GTK_EXE_PREFIX "$SNAP/usr"
+fijar GTK_DATA_PREFIX "$SNAP/usr"
+fijar GDK_PIXBUF_MODULEDIR "$LIB/gdk-pixbuf-2.0/2.10.0/loaders"
+[ -s "$CACHE/loaders.cache" ] && fijar GDK_PIXBUF_MODULE_FILE "$CACHE/loaders.cache"
+[ -s "$CACHE/immodules.cache" ] && fijar GTK_IM_MODULE_FILE "$CACHE/immodules.cache"
+export PYTROL_SNAP_SAVED="${saved# }"
+
+exec "$LOADER" --library-path "$LIBPATH" "$BASE/usr/bin/python3.10" "$SNAP/lib/pytrol/pytrol.py" "$@"

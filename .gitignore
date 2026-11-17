@@ -1,6 +1,12 @@
-__pycache__/
-*.pyc
 build-dir/
-.flatpak-builder/
 *.flatpak
+.flatpak-builder/
+overlay/
+parts/
+prime/
+*.pyc
+__pycache__/
 repo/
+*.snap
+snap/.snapcraft/
+stage/

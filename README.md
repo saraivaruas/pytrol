@@ -193,8 +193,40 @@ flathub.org. Publicar es gratuito; el proceso es:
 
 Guía oficial: https://docs.flathub.org/docs/for-app-authors/submission
 
-## Alternativa: Snap Store
+## Snap
 
-Si prefieres la tienda de Ubuntu, el equivalente es un `snapcraft.yaml` con
-`base: core24`, extensión `gnome` y `plugs: [home, x11, wayland]`. Publicar
-también es gratis con una cuenta de Ubuntu One.
+El proyecto incluye `snap/snapcraft.yaml` (base core22, **confinamiento classic**). Es
+classic porque Pytrol es un terminal: el shell de cada panel debe ser el tuyo, con
+acceso a tus proyectos y herramientas; un snap estricto lo encerraría en un entorno
+aislado. Python y la biblioteca C vienen de la base core22 (snapd la instala sola);
+GTK 3, VTE y GtkSourceView 4 van dentro del paquete (unos 35 MB).
+
+Instalar el paquete ya construido (pide contraseña, por ser classic y local):
+
+```bash
+sudo snap install --dangerous --classic ./pytrol_0.6.4_amd64.snap
+```
+
+Quitarlo: `sudo snap remove pytrol`. Comparte `~/.config/pytrol` con la instalación
+normal, así que conserva la misma sesión y preferencias.
+
+Construirlo de nuevo (en Ubuntu 22.04; compila en este equipo y no instala nada):
+
+```bash
+snapcraft pack --destructive-mode
+```
+
+Dos detalles prácticos:
+
+- **La ruta del proyecto no puede tener espacios**: snapcraft falla con ellos. Si tu
+  carpeta los tiene, copia el proyecto a otra sin espacios y compila allí.
+- Dentro del snap el lanzador (`snap/local/pytrol-launcher`) cambia variables de entorno
+  para encontrar sus bibliotecas; Pytrol las deja como estaban antes de abrir el shell de
+  un panel o una aplicación externa, de modo que `python3`, `git`, etc. del sistema no
+  ven nada del snap.
+
+Publicar en la Snap Store: `snapcraft register pytrol`, `snapcraft login`,
+`snapcraft upload --release=stable pytrol_*.snap`. Al ser classic, el primer envío
+necesita que la tienda apruebe el confinamiento manualmente (se pide en el foro
+https://forum.snapcraft.io, categoría «store-requests», explicando que es un emulador de
+terminal); mientras tanto el snap solo se instala desde archivo local.

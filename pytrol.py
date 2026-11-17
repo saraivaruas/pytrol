@@ -26,6 +26,9 @@ except (ValueError, ImportError):
 APP_TITLE = "Pytrol"
 APP_ID = "io.github.saraivaruas.Pytrol"
 IN_FLATPAK = os.path.exists("/.flatpak-info")
+# Snap (confinamiento classic): el lanzador del snap fija variables propias (PYTHONPATH,
+# GI_TYPELIB_PATH...) y deja guardados los valores originales en PYTROL_SNAP_*.
+IN_SNAP = bool(os.environ.get("SNAP")) and bool(os.environ.get("PYTROL_SNAP_SAVED"))
 CONFIG_DIR = os.environ.get("PYTROL_CONFIG_DIR") or os.path.join(GLib.get_user_config_dir(), "pytrol")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 SESSION_FILE = os.path.join(CONFIG_DIR, "session.json")
@@ -157,6 +160,57 @@ def load_config():
     return cfg
 
 
+def snap_env_overrides():
+    """Variables que el snap cambió y que los programas del usuario no deben heredar.
+
+    Devuelve {variable: valor original, o None si no existía}. Fuera del snap, vacío.
+    """
+    if not IN_SNAP:
+        return {}
+    out = {}
+    for var in os.environ["PYTROL_SNAP_SAVED"].split():
+        had = os.environ.get(f"PYTROL_SNAP_HAD_{var}") == "1"
+        out[var] = os.environ.get(f"PYTROL_SNAP_ORIG_{var}", "") if had else None
+    for key in os.environ:
+        if key == "SNAP" or key.startswith(("SNAP_", "PYTROL_SNAP_")):
+            out[key] = None
+    return out
+
+
+def snap_clean_argv():
+    """Prefijo `env` que devuelve al shell el entorno original, sin lo que añadió el snap.
+
+    VTE solo puede añadir variables al entorno del hijo, no quitarlas; por eso se limpia
+    ejecutando el shell a través de `env -u VARIABLE ... VARIABLE=valor ...`.
+    """
+    overrides = snap_env_overrides()
+    if not overrides:
+        return []
+    args = ["/usr/bin/env"]
+    # `env` solo admite las opciones -u antes de las asignaciones VARIABLE=valor.
+    for key, value in overrides.items():
+        if value is None:
+            args += ["-u", key]
+    for key, value in overrides.items():
+        if value is not None:
+            args.append(f"{key}={value}")
+    return args
+
+
+def launch_context():
+    """Contexto para abrir aplicaciones del sistema sin las bibliotecas del snap (None fuera del snap)."""
+    overrides = snap_env_overrides()
+    if not overrides:
+        return None
+    ctx = Gio.AppLaunchContext()
+    for key, value in overrides.items():
+        if value is None:
+            ctx.unsetenv(key)
+        else:
+            ctx.setenv(key, value)
+    return ctx
+
+
 def ensure_askpass_helper():
     """Crea el script que sudo/ssh ejecutan cuando no hay terminal para pedir la contraseña.
 
@@ -165,6 +219,8 @@ def ensure_askpass_helper():
     """
     if IN_FLATPAK:
         launcher = f"exec flatpak run --command=pytrol {APP_ID} --askpass \"$@\""
+    elif IN_SNAP:
+        launcher = f"exec /snap/bin/{shlex.quote(os.environ.get('SNAP_NAME', 'pytrol'))} --askpass \"$@\""
     else:
         me = os.path.realpath(__file__)
         if not os.path.exists(me):
@@ -446,6 +502,8 @@ class Pane(Gtk.Box):
             argv += [f"--directory={cwd}"] + shlex.split(shell)
         else:
             argv = shlex.split(shell)
+            if IN_SNAP:
+                argv = snap_clean_argv() + argv
         self.term.spawn_async(flags, cwd, argv, envv,
                               GLib.SpawnFlags.SEARCH_PATH, None, None, -1, None, self._on_spawned, None)
 
@@ -941,7 +999,7 @@ class ProjectTree(Gtk.Box):
 
     def open_with_default(self, path):
         try:
-            Gio.AppInfo.launch_default_for_uri(Gio.File.new_for_path(path).get_uri(), None)
+            Gio.AppInfo.launch_default_for_uri(Gio.File.new_for_path(path).get_uri(), launch_context())
         except GLib.Error as exc:
             print(f"No se pudo abrir {path}: {exc}", file=sys.stderr)
 

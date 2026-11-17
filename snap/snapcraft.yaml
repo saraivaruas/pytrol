@@ -1,0 +1,93 @@
+# Snap de Pytrol. Compilar y probar:
+#   snapcraft pack                      (necesita LXD o Multipass; ver README)
+#   snapcraft pack --destructive-mode   (compila en este equipo; debe ser Ubuntu 22.04)
+# Instalar el resultado:  sudo snap install --dangerous --classic ./pytrol_*.snap
+#
+# Confinamiento classic: Pytrol es un emulador de terminal y el shell de cada panel debe
+# ser el del usuario, con acceso a todo su sistema. Un snap estricto lo dejaría dentro de
+# un entorno aislado, sin acceso a sus proyectos ni a sus herramientas. Los snaps classic
+# requieren aprobación manual de la tienda al publicarse; instalados desde archivo local
+# funcionan sin ella.
+name: pytrol
+title: Pytrol
+base: core22
+adopt-info: pytrol
+summary: Terminal avanzado con paneles, proyectos y editor integrado
+description: |
+  Pytrol es un terminal avanzado para Linux escrito en Python (GTK 3 y VTE): potencia,
+  velocidad y control. Divide la pantalla en 2, 4, 6 u 8 paneles y abre un proyecto
+  distinto en cada uno, con pestañas, árbol de archivos, editor integrado con resaltado
+  de sintaxis, sesión persistente y atajos configurables.
+
+  Este snap usa confinamiento classic porque el shell de cada panel corre en tu sistema,
+  con tus archivos y herramientas.
+license: MIT
+website: https://github.com/saraivaruas/pytrol
+source-code: https://github.com/saraivaruas/pytrol
+issues: https://github.com/saraivaruas/pytrol/issues
+contact: https://github.com/saraivaruas/pytrol/issues
+icon: data/icons/io.github.saraivaruas.Pytrol.svg
+grade: stable
+confinement: classic
+
+# GTK, VTE y GtkSourceView se cargan por GObject Introspection desde Python: el linter de
+# bibliotecas solo ve dependencias de binarios y las marcaría como no usadas.
+lint:
+  ignore:
+    - library
+
+apps:
+  pytrol:
+    command: bin/pytrol-launcher
+
+parts:
+  # GTK 3, VTE 2.91, GtkSourceView 4 y PyGObject, empaquetados desde Ubuntu 22.04.
+  runtime:
+    plugin: nil
+    # Python y la biblioteca C vienen de core22 (snapcraft los filtra al empaquetar);
+    # los binarios y bibliotecas del snap se parchean para usarlas.
+    build-attributes: [enable-patchelf]
+    build-packages:
+      - libglib2.0-bin
+    stage-packages:
+      - python3-gi
+      - gir1.2-gtk-3.0
+      - gir1.2-vte-2.91
+      - gir1.2-gtksource-4
+      - libgtk-3-0
+      - libgtk-3-bin
+      - libgtk-3-common
+      - libvte-2.91-0
+      - libgtksourceview-4-0
+      - libgtksourceview-4-common
+      - libgdk-pixbuf2.0-bin
+      - librsvg2-common
+      - gsettings-desktop-schemas
+      - adwaita-icon-theme
+      - hicolor-icon-theme
+      - shared-mime-info
+    override-build: |
+      craftctl default
+      # Los esquemas de GSettings de los paquetes vienen sin compilar.
+      glib-compile-schemas "$CRAFT_PART_INSTALL/usr/share/glib-2.0/schemas"
+      # GIO busca módulos aquí; vacío para no cargar los del sistema.
+      mkdir -p "$CRAFT_PART_INSTALL"/usr/lib/*-linux-gnu/gio/modules
+      # Documentación y ayudas que no hacen falta en ejecución.
+      rm -rf "$CRAFT_PART_INSTALL"/usr/share/doc "$CRAFT_PART_INSTALL"/usr/share/man \
+             "$CRAFT_PART_INSTALL"/usr/share/lintian "$CRAFT_PART_INSTALL"/usr/share/bash-completion
+
+  launcher:
+    plugin: dump
+    source: snap/local
+    organize:
+      pytrol-launcher: bin/pytrol-launcher
+
+  pytrol:
+    after: [runtime]
+    plugin: nil
+    source: .
+    override-build: |
+      install -Dm755 pytrol.py "$CRAFT_PART_INSTALL/lib/pytrol/pytrol.py"
+      # La versión sale de la primera entrada de <releases> del metainfo.
+      version="$(grep -oP '<release version="\K[^"]+' data/io.github.saraivaruas.Pytrol.metainfo.xml | head -n1)"
+      craftctl set version="$version"
