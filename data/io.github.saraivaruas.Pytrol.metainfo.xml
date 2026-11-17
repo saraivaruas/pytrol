@@ -38,6 +38,9 @@
   </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.6.3" date="2026-11-16">
+      <description><p>En las cuadrículas de paneles puedes elegir si los divisores independientes son los verticales (por fila) o los horizontales (por columna), e intercambiarlos en una pestaña ya abierta sin perder terminales ni proyectos.</p></description>
+    </release>
     <release version="0.6.2" date="2026-11-16">
       <description><p>Los diseños de paneles horizontales (varias filas) ahora tienen divisores independientes en cada columna: mover el divisor de una columna ya no mueve el de las demás.</p></description>
     </release>

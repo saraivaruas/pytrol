@@ -7,7 +7,10 @@ que GNOME Terminal). Licencia MIT.
 
 - Pestañas reordenables que heredan el directorio actual.
 - **Paneles divisibles** en 2, 4, 6 u 8, vertical u horizontalmente (menú
-  Paneles → Diseño de paneles), o dividiendo el panel activo a mano.
+  Paneles → Diseño de paneles), o dividiendo el panel activo a mano. En las
+  cuadrículas eliges qué divisores se mueven de forma independiente (verticales
+  por fila u horizontales por columna) y puedes intercambiarlos en cualquier
+  momento con Paneles → Diseño de paneles → Intercambiar divisores.
 - **Un proyecto distinto por panel**: menú Proyectos → abre una carpeta en el
   panel actual, en un panel nuevo o en una pestaña nueva. Cada panel muestra una
   cabecera con su carpeta y hay lista de proyectos recientes.

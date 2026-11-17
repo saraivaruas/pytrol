@@ -81,6 +81,7 @@ ACTIONS = [
     ("zoom_in", "Aumentar zoom", "<Primary>plus"),
     ("zoom_out", "Reducir zoom", "<Primary>minus"),
     ("zoom_reset", "Zoom normal", "<Primary>0"),
+    ("swap_dividers", "Intercambiar divisores independientes (horizontal ↔ vertical)", ""),
     ("toggle_menubar", "Mostrar barra de menú", "<Primary><Shift>m"),
     ("fullscreen", "Pantalla completa", "F11"),
     ("toggle_tree", "Árboles de proyecto en los paneles", "<Primary><Shift>e"),
@@ -92,14 +93,21 @@ ACTION_LABELS = {a[0]: a[1] for a in ACTIONS}
 DEFAULT_SHORTCUTS = {a[0]: a[2] for a in ACTIONS}
 
 # Diseños predefinidos: (etiqueta, filas, columnas)
+# (etiqueta, filas, columnas, modo). Modo "filas": primero filas, así los divisores verticales de
+# cada fila son independientes y el divisor horizontal es único. Modo "columnas": al revés.
 LAYOUTS = [
-    ("2 paneles verticales (izq/der)", 1, 2),
-    ("2 paneles horizontales (arriba/abajo)", 2, 1),
-    ("4 paneles (2×2)", 2, 2),
-    ("6 paneles verticales (2 filas × 3)", 2, 3),
-    ("6 paneles horizontales (3 filas × 2)", 3, 2),
-    ("8 paneles verticales (2 filas × 4)", 2, 4),
-    ("8 paneles horizontales (4 filas × 2)", 4, 2),
+    ("2 paneles verticales (izq/der)", 1, 2, "filas"),
+    ("2 paneles horizontales (arriba/abajo)", 2, 1, "columnas"),
+    ("4 paneles (2×2), divisores verticales independientes", 2, 2, "filas"),
+    ("4 paneles (2×2), divisores horizontales independientes", 2, 2, "columnas"),
+    ("6 paneles (2 filas × 3), divisores verticales independientes", 2, 3, "filas"),
+    ("6 paneles (2 filas × 3), divisores horizontales independientes", 2, 3, "columnas"),
+    ("6 paneles (3 filas × 2), divisores verticales independientes", 3, 2, "filas"),
+    ("6 paneles (3 filas × 2), divisores horizontales independientes", 3, 2, "columnas"),
+    ("8 paneles (2 filas × 4), divisores verticales independientes", 2, 4, "filas"),
+    ("8 paneles (2 filas × 4), divisores horizontales independientes", 2, 4, "columnas"),
+    ("8 paneles (4 filas × 2), divisores verticales independientes", 4, 2, "filas"),
+    ("8 paneles (4 filas × 2), divisores horizontales independientes", 4, 2, "columnas"),
 ]
 
 DEFAULT_CONFIG = {
@@ -1297,10 +1305,12 @@ class Pytrol(Gtk.Window):
             self._item("close_tab"), None, self._item("quit")]))
 
         layouts = Gtk.Menu()
-        for idx, (label, _r, _c) in enumerate(LAYOUTS):
+        for idx, (label, _r, _c, _m) in enumerate(LAYOUTS):
             it = Gtk.MenuItem(label=label)
             it.connect("activate", lambda _w, i=idx: self.apply_layout(i))
             layouts.append(it)
+        layouts.append(Gtk.SeparatorMenuItem())
+        layouts.append(self._item("swap_dividers"))
         layout_item = Gtk.MenuItem(label="Diseño de paneles")
         layout_item.set_submenu(layouts)
 
@@ -1488,7 +1498,7 @@ class Pytrol(Gtk.Window):
 
     def apply_layout(self, idx):
         """Aplica un diseño predefinido: en la pestaña actual si tiene un solo panel, si no en una nueva."""
-        _label, rows, cols = LAYOUTS[idx]
+        _label, rows, cols, mode = LAYOUTS[idx]
         tab = self.current_tab()
         if tab is None or len(tab.panes()) != 1:
             tab = self.new_tab()
@@ -1496,7 +1506,7 @@ class Pytrol(Gtk.Window):
         cwd = first.cwd()
         tab.remove(first)
         panes = [first] + [Pane(self, cwd) for _ in range(rows * cols - 1)]
-        if rows > cols:
+        if mode == "columnas":
             # Diseños horizontales (varias filas): primero columnas y dentro de cada una se
             # apilan sus paneles, así los divisores horizontales de cada columna son independientes.
             cols_widgets = []
@@ -1517,6 +1527,47 @@ class Pytrol(Gtk.Window):
         tab.focused = first
         self.update_headers(tab)
         first.term.grab_focus()
+        self.save_session()
+
+    @staticmethod
+    def _chain(w, orientation):
+        """Hijos de una cadena de Paned del mismo sentido: [a, b, c] para a|(b|c)."""
+        if isinstance(w, Gtk.Paned) and w.get_orientation() == orientation:
+            return [w.get_child1()] + Pytrol._chain(w.get_child2(), orientation)
+        return [w]
+
+    def swap_dividers(self):
+        """Cuadrícula de la pestaña: pasa de divisores verticales independientes a horizontales
+        independientes (o al revés), conservando cada terminal y su proyecto."""
+        tab = self.current_tab()
+        root = tab.root() if tab else None
+        if not isinstance(root, Gtk.Paned):
+            return self.message("No se puede intercambiar", "Esta pestaña no es una cuadrícula regular de paneles.")
+        outer = root.get_orientation()
+        inner = (Gtk.Orientation.HORIZONTAL if outer == Gtk.Orientation.VERTICAL
+                 else Gtk.Orientation.VERTICAL)
+        groups = [self._chain(g, inner) for g in self._chain(root, outer)]
+        if (len(groups) < 2 or len({len(g) for g in groups}) != 1 or len(groups[0]) < 2
+                or not all(isinstance(p, Pane) for g in groups for p in g)):
+            return self.message("No se puede intercambiar", "Esta pestaña no es una cuadrícula regular de paneles.")
+        panes = [p for g in groups for p in g]
+        n_outer, n_inner = len(groups), len(groups[0])
+        focused = tab.focused
+        tab.remove(root)
+        for p in panes:
+            par = p.get_parent()
+            if par is not None:
+                par.remove(p)
+        # Transponer: lo que eran grupos pasan a ser posiciones dentro de cada nuevo grupo
+        new_groups = [self._nest([groups[o][i] for o in range(n_outer)], outer) for i in range(n_inner)]
+        new_root = self._nest(new_groups, inner)
+        tab.pack_start(new_root, True, True, 0)
+        tab.show_all()
+        for p in panes:
+            p.set_tree_visible(p.tree_visible)
+        tab.focused = focused if focused in panes else panes[0]
+        self.update_headers(tab)
+        tab.focused.term.grab_focus()
         self.save_session()
 
     def _nest(self, widgets, orientation):
@@ -1766,6 +1817,7 @@ class Pytrol(Gtk.Window):
         elif a == "zoom_in" and term: self.zoom(term, 1.1)
         elif a == "zoom_out" and term: self.zoom(term, 1 / 1.1)
         elif a == "zoom_reset" and term: term.set_font_scale(1.0)
+        elif a == "swap_dividers": self.swap_dividers()
         elif a == "toggle_menubar": self.toggle_menubar()
         elif a == "toggle_tree": self.toggle_tree()
         elif a == "open_file" and pane:
@@ -1817,7 +1869,7 @@ class Pytrol(Gtk.Window):
         menu.popup_at_pointer(event)
 
     def show_about(self, *_):
-        dlg = Gtk.AboutDialog(transient_for=self, program_name=APP_TITLE, version="0.6.2",
+        dlg = Gtk.AboutDialog(transient_for=self, program_name=APP_TITLE, version="0.6.3",
                               comments="Advanced Python Terminal: Power, Speed, Control.\nPaneles, proyectos y pestañas en un solo lugar.",
                               logo_icon_name=APP_ID, license_type=Gtk.License.MIT_X11)
         dlg.run()
