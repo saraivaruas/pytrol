@@ -35,6 +35,14 @@
       <image>https://raw.githubusercontent.com/saraivaruas/pytrol/main/data/screenshots/main.png</image>
       <caption>Cuatro paneles, cada uno con su proyecto, su árbol de archivos y su editor</caption>
     </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/saraivaruas/pytrol/main/docs/pytrol-claro.png</image>
+      <caption>Esquema claro y editor con pestañas por archivo</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/saraivaruas/pytrol/main/docs/pytrol-dracula.png</image>
+      <caption>Esquema Dracula con tres paneles</caption>
+    </screenshot>
   </screenshots>
   <content_rating type="oars-1.1" />
   <releases>

@@ -1,0 +1,29 @@
+name: Error
+description: Algo no funciona como debería
+labels: [bug]
+body:
+  - type: textarea
+    id: que
+    attributes: {label: Qué pasó, description: Y qué esperabas que pasara}
+    validations: {required: true}
+  - type: textarea
+    id: pasos
+    attributes: {label: Pasos para reproducirlo}
+    validations: {required: true}
+  - type: input
+    id: version
+    attributes: {label: Versión de Pytrol, description: "Menú Ayuda → Acerca de, o la versión del paquete"}
+    validations: {required: true}
+  - type: dropdown
+    id: instalacion
+    attributes:
+      label: Cómo lo instalaste
+      options: [install.sh, Flatpak, Snap (classic), Snap (beta devmode), Otra]
+    validations: {required: true}
+  - type: input
+    id: distro
+    attributes: {label: Distribución, versión y sesión (X11 o Wayland), placeholder: Ubuntu 24.04 · Wayland}
+    validations: {required: true}
+  - type: textarea
+    id: salida
+    attributes: {label: Mensajes de error, description: "Ejecuta `pytrol` desde otro terminal y pega lo que imprima. Quita datos privados.", render: text}

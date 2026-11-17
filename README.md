@@ -1,9 +1,17 @@
 # Pytrol
 
+[![tests](https://github.com/saraivaruas/pytrol/actions/workflows/tests.yml/badge.svg)](https://github.com/saraivaruas/pytrol/actions/workflows/tests.yml)
+[![paquetes](https://github.com/saraivaruas/pytrol/actions/workflows/paquetes.yml/badge.svg)](https://github.com/saraivaruas/pytrol/actions/workflows/paquetes.yml)
+[![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-green.svg)](LICENSE)
+![GTK 3](https://img.shields.io/badge/GTK-3-blue)
+![Linux](https://img.shields.io/badge/plataforma-Linux-lightgrey)
+
 **Advanced Python Terminal: Power, Speed, Control.**
 
 Terminal avanzado para Linux escrito en Python con GTK 3 y VTE (el mismo motor
-que GNOME Terminal). Licencia MIT.
+que GNOME Terminal). Licencia MIT. 🇬🇧 [English version](README.en.md).
+
+![Pytrol con cuatro paneles, cada uno con su proyecto, su árbol de archivos y su editor](docs/pytrol-paneles.png)
 
 - **Sesión a tu medida**: por defecto Pytrol recuerda paneles, proyectos, archivos y contenido. Un panel puede marcarse como «no recordar» (clic derecho o menú Paneles) para que vuelva limpio, y Archivo → «Salir sin guardar la sesión» empieza de cero la próxima vez.
 - Pestañas reordenables que heredan el directorio actual.
@@ -53,6 +61,17 @@ que GNOME Terminal). Licencia MIT.
 - **Cierre seguro**: al cerrar pregunta dos veces (configurable: ninguna, una o
   dos) para que no se pierda el trabajo por un atajo pulsado sin querer. Si el
   shell termina por sí solo con `exit`, no pregunta.
+
+## Capturas
+
+| | |
+|---|---|
+| ![Esquema claro con editor de HTML y CSS](docs/pytrol-claro.png) | ![Esquema Dracula con editor de Python](docs/pytrol-dracula.png) |
+| Esquema claro, editor con pestañas por archivo | Esquema Dracula, tres paneles |
+
+![Preferencias: fuente, esquema de colores, cursor, historial, shell y opciones de sesión](docs/pytrol-preferencias.png)
+
+Las capturas se generan con la aplicación real y datos de ejemplo, sin tocar tu configuración: `tools/capturar-pantallas.py` (y `tools/crear-imagen-social.py` para la imagen de GitHub).
 
 ## Instalar y probar en tu máquina
 

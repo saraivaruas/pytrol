@@ -1,0 +1,80 @@
+name: paquetes
+
+on:
+  push:
+    branches: [main]
+    paths: [snap/**, pytrol.py, data/**, scripts/**, .github/workflows/paquetes.yml]
+  pull_request:
+    branches: [main]
+    paths: [snap/**, pytrol.py, data/**, scripts/**, .github/workflows/paquetes.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  metadatos:
+    name: Metadatos (AppStream y .desktop)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends appstream desktop-file-utils
+      - run: appstreamcli validate --no-net data/io.github.saraivaruas.Pytrol.metainfo.xml
+      - run: desktop-file-validate data/io.github.saraivaruas.Pytrol.desktop
+
+  snap:
+    name: Snap (classic, ${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: amd64, runner: ubuntu-24.04}
+          - {arch: arm64, runner: ubuntu-24.04-arm}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: snapcore/action-build@v1
+        id: build
+      - name: Instalar y comprobar que abre
+        run: |
+          sudo apt-get install -y --no-install-recommends xvfb
+          sudo snap install --dangerous --classic "${{ steps.build.outputs.snap }}"
+          export PYTROL_CONFIG_DIR="$(mktemp -d)"
+          set +e
+          xvfb-run -a timeout 10 snap run pytrol
+          test $? -eq 124
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pytrol-snap-${{ matrix.arch }}
+          path: ${{ steps.build.outputs.snap }}
+
+  snap-beta:
+    name: Snap (devmode, ${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: amd64, runner: ubuntu-24.04}
+          - {arch: arm64, runner: ubuntu-24.04-arm}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      # Misma receta en «devmode»: la tienda la acepta en beta y edge sin revisión manual.
+      - name: Receta devmode
+        run: |
+          sed -i 's/^confinement: classic/confinement: devmode/; s/^grade: stable/grade: devel/' snap/snapcraft.yaml
+          sed -i 's/craftctl set version="\$version"/craftctl set version="$version-beta"/' snap/snapcraft.yaml
+          grep -E '^(confinement|grade):' snap/snapcraft.yaml
+      - uses: snapcore/action-build@v1
+        id: build
+      - name: Instalar y comprobar que abre
+        run: |
+          sudo apt-get install -y --no-install-recommends xvfb
+          sudo snap install --dangerous --devmode "${{ steps.build.outputs.snap }}"
+          export PYTROL_CONFIG_DIR="$(mktemp -d)"
+          set +e
+          xvfb-run -a timeout 10 snap run pytrol
+          test $? -eq 124
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pytrol-snap-beta-${{ matrix.arch }}
+          path: ${{ steps.build.outputs.snap }}
