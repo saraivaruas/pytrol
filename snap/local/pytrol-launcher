@@ -12,6 +12,10 @@
 # aplicaciones que abre, para que python3, git, etc. del sistema no vean las del snap.
 set -e
 
+# En un snap estricto o devmode snapd cambia HOME a ~/snap/pytrol/...; Pytrol debe usar
+# el HOME real para que el shell, los proyectos y la sesión sean los del usuario.
+[ -n "${SNAP_REAL_HOME:-}" ] && export HOME="$SNAP_REAL_HOME"
+
 BASE=/snap/core22/current
 if [ ! -x "$BASE/usr/bin/python3.10" ]; then
   echo "Falta la base core22 (snap install core22)." >&2

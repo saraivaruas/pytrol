@@ -213,20 +213,50 @@ normal, así que conserva la misma sesión y preferencias.
 Construirlo de nuevo (en Ubuntu 22.04; compila en este equipo y no instala nada):
 
 ```bash
-snapcraft pack --destructive-mode
+./scripts/construir-snap.sh classic    # snap classic para el canal stable
+./scripts/construir-snap.sh beta       # variante devmode para el canal beta
 ```
 
-Dos detalles prácticos:
+El script compila en una copia dentro de `/tmp` porque **snapcraft falla si la ruta del
+proyecto tiene espacios**. Por debajo ejecuta `snapcraft pack --destructive-mode`.
 
-- **La ruta del proyecto no puede tener espacios**: snapcraft falla con ellos. Si tu
-  carpeta los tiene, copia el proyecto a otra sin espacios y compila allí.
+### Beta (devmode) y después classic
+
+La Store exige una aprobación manual para publicar un snap classic. Mientras llega,
+puede publicarse una **beta en modo devmode**, que no la necesita:
+
+| | Beta | Classic |
+|---|---|---|
+| Confinamiento | `devmode`, `grade: devel` | `classic`, `grade: stable` |
+| Canales de la Store | `beta` y `edge` (nunca `stable` ni `candidate`) | todos, tras la aprobación |
+| Versión | `0.6.4-beta` | `0.6.4` |
+| Shell de los paneles | Corre sobre el sistema de archivos de core22: sin tu `git` ni tus herramientas, y solo el shell que exista allí | Tu shell y tu sistema |
+| Para qué sirve | Probar la ventana, los paneles, el editor y la instalación desde la Store | Uso diario |
+
+La beta solo sirve para validar el paquete; el uso real de un terminal es el classic.
+
+Publicación en orden (cada paso requiere tu cuenta de Ubuntu One):
+
+```bash
+snapcraft login
+snapcraft register pytrol
+snapcraft upload --release=beta pytrol_0.6.4-beta_amd64.snap
+```
+
+Cuando la Store apruebe el confinamiento classic:
+
+```bash
+snapcraft upload --release=stable pytrol_0.6.4_amd64.snap
+```
+
+Detalles prácticos:
+
 - Dentro del snap el lanzador (`snap/local/pytrol-launcher`) cambia variables de entorno
   para encontrar sus bibliotecas; Pytrol las deja como estaban antes de abrir el shell de
   un panel o una aplicación externa, de modo que `python3`, `git`, etc. del sistema no
   ven nada del snap.
 
-Publicar en la Snap Store: `snapcraft register pytrol`, `snapcraft login`,
-`snapcraft upload --release=stable pytrol_*.snap`. Al ser classic, el primer envío
-necesita que la tienda apruebe el confinamiento manualmente (se pide en el foro
-https://forum.snapcraft.io, categoría «store-requests», explicando que es un emulador de
-terminal); mientras tanto el snap solo se instala desde archivo local.
+La aprobación del confinamiento classic se pide en el foro https://forum.snapcraft.io,
+categoría «store-requests», explicando que Pytrol es un emulador de terminal y que su
+shell debe correr en el sistema del usuario. Mientras tanto, el snap classic solo se
+instala desde archivo local.
