@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Crea docs/social-preview.png (1280x640), la imagen que GitHub muestra al compartir el repositorio.
+"""Crea las imágenes de presentación de Pytrol.
+
+- docs/social-preview.png (1280x640): la que GitHub muestra al compartir el repositorio.
+  Subir a mano: GitHub → Settings → General → Social preview.
+- packaging/store/banner.png (1920x640, 3:1) e icon.png (512x512): para la ficha de la Snap Store.
 
 Mismo estilo que la de Sentinel: fondo oscuro con un resplandor, icono, nombre, descripción y etiquetas.
 Requiere Pillow y ImageMagick (convert, para pasar el icono SVG a PNG).
-Subir a mano: GitHub → Settings → General → Social preview.
 """
 import subprocess
 from io import BytesIO
@@ -13,16 +16,15 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 AQUI = Path(__file__).resolve().parent.parent
 ICONO = AQUI / "data/icons/io.github.saraivaruas.Pytrol.svg"
-SALIDA = AQUI / "docs/social-preview.png"
+TIENDA = AQUI / "packaging/store"
 FUENTES = "/usr/share/fonts/truetype/dejavu/"
-W, H = 1280, 640
 
 
 def fuente(negrita, tam):
     return ImageFont.truetype(FUENTES + ("DejaVuSans-Bold.ttf" if negrita else "DejaVuSans.ttf"), tam)
 
 
-def main():
+def componer(W, H, salida):
     img = Image.new("RGB", (W, H), "#0a0f1e")
     # Resplandor violeta arriba a la derecha: elipse difuminada usada como máscara.
     mascara = Image.new("L", (1400, 1100), 0)
@@ -47,8 +49,17 @@ def main():
         d.rounded_rectangle((x, 450, x + ancho, 492), radius=10, fill="#161e36", outline="#2e3a6b", width=1)
         d.text((x + 18, 458), texto, font=f, fill="#eef2ff")
         x += ancho + 14
-    img.save(SALIDA, optimize=True)
-    print(f"  {SALIDA.relative_to(AQUI)}")
+    img.save(salida, optimize=True)
+    print(f"  {salida.relative_to(AQUI)}")
+
+
+def main():
+    componer(1280, 640, AQUI / "docs/social-preview.png")
+    TIENDA.mkdir(parents=True, exist_ok=True)
+    componer(1920, 640, TIENDA / "banner.png")
+    subprocess.run(["convert", "-background", "none", "-density", "800", str(ICONO), "-resize", "512x512", "-depth", "8",
+                    str(TIENDA / "icon.png")], check=True)
+    print(f"  {(TIENDA / 'icon.png').relative_to(AQUI)}")
 
 
 if __name__ == "__main__":

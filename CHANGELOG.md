@@ -5,6 +5,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 ## [Sin publicar]
 
 ### Agregado
+- **Snap publicado en la Snap Store** (canal `beta`, 0.6.4-beta); la versión classic está subida y a la espera de la aprobación del confinamiento. Ficha, banner e icono en `packaging/store/`.
 - **Snap** (`snap/snapcraft.yaml`, base core22): paquete *classic* para uso diario y variante *beta* en `devmode` para los canales beta y edge de la Store; `scripts/construir-snap.sh` construye ambos.
 - **Capturas e imagen social** en `docs/`, generadas con la aplicación real y datos de ejemplo (`tools/capturar-pantallas.py`, `tools/crear-imagen-social.py`).
 - README en inglés (`README.en.md`), código de conducta, guía para contribuir, política de seguridad, plantillas de issues y de Pull Request.

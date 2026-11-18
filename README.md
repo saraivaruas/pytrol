@@ -220,6 +220,12 @@ acceso a tus proyectos y herramientas; un snap estricto lo encerraría en un ent
 aislado. Python y la biblioteca C vienen de la base core22 (snapd la instala sola);
 GTK 3, VTE y GtkSourceView 4 van dentro del paquete (unos 35 MB).
 
+**Desde la Snap Store**, por ahora solo la beta de pruebas (modo `devmode`: su shell corre sobre core22, sin tus herramientas; el uso diario será la versión classic, cuando la Store apruebe ese confinamiento):
+
+```bash
+sudo snap install pytrol --channel=beta --devmode
+```
+
 Instalar el paquete ya construido (pide contraseña, por ser classic y local):
 
 ```bash
