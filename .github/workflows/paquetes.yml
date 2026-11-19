@@ -42,7 +42,7 @@ jobs:
           set +e
           xvfb-run -a timeout 10 snap run pytrol
           test $? -eq 124
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pytrol-snap-${{ matrix.arch }}
           path: ${{ steps.build.outputs.snap }}
@@ -74,7 +74,7 @@ jobs:
           set +e
           xvfb-run -a timeout 10 snap run pytrol
           test $? -eq 124
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pytrol-snap-beta-${{ matrix.arch }}
           path: ${{ steps.build.outputs.snap }}
